@@ -11,6 +11,9 @@ env:
   SUPABASE_URL: https://smvkbqfffynhtejwvkuj.supabase.co
   SUPABASE_PUBLISHABLE_KEY: sb_publishable_GxiH2VpHQjzFd7HHJ-rDdA_4sCDhh6b
 
+permissions:
+  contents: write
+
 jobs:
   web:
     runs-on: ubuntu-latest
@@ -36,3 +39,12 @@ jobs:
           name: negeri-wkwk-web
           path: app/build/web
           retention-days: 14
+      - name: Simpan hasil build ke branch web-preview
+        working-directory: app/build/web
+        run: |
+          git init -q -b web-preview
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Build web dari ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" web-preview
