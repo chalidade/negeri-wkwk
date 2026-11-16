@@ -67,6 +67,7 @@ export function createInitialState(
       suaraRakyat: 0,
       ordal: 0,
       phkUntilRound: 0,
+      ...(m.bot ? { bot: true } : {}),
     };
   }
 

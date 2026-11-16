@@ -19,3 +19,12 @@ verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = false
+
+[functions.add-bot]
+verify_jwt = false
+
+[functions.remove-bot]
+verify_jwt = false
+
+[functions.bot-step]
+verify_jwt = false

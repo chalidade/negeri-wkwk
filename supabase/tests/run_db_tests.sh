@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 run_sql() {
   "$@" -v ON_ERROR_STOP=1 -q -f tests/supabase_stub.sql
-  "$@" -v ON_ERROR_STOP=1 -q -f migrations/20261116000000_init.sql
+  for m in migrations/*.sql; do "$@" -v ON_ERROR_STOP=1 -q -f "$m"; done
   "$@" -v ON_ERROR_STOP=1 -q -f tests/rls_test.sql
 }
 
@@ -16,7 +16,7 @@ if command -v docker >/dev/null 2>&1; then
   trap 'docker stop "$name" >/dev/null' EXIT
   until docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
   sleep 1
-  for f in tests/supabase_stub.sql migrations/20261116000000_init.sql tests/rls_test.sql; do
+  for f in tests/supabase_stub.sql migrations/*.sql tests/rls_test.sql; do
     docker exec -i "$name" psql -U postgres -v ON_ERROR_STOP=1 -q < "$f"
   done
 else

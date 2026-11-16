@@ -2,11 +2,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  BOT_NAMES,
   GOV,
   GameError,
   applyAction,
   assignSecrets,
   createInitialState,
+  decideBotAction,
   scriptedRng,
   seededRng,
   type Action,
@@ -288,5 +290,44 @@ describe("simulasi acak", () => {
       finished++;
     }
     assert.equal(finished, 1000);
+  });
+});
+
+describe("bot", () => {
+  it("300 game penuh berisi bot selalu selesai tanpa aksi ditolak", () => {
+    const tally = { rakyat_menang: 0, rakyat_kalah: 0, juragan_menang: 0 };
+    for (let g = 0; g < 300; g++) {
+      const rng = seededRng(5000 + g);
+      const n = 2 + (g % 5);
+      const mode = g % 3 === 0 ? "juragan" : "rakyat_bersatu";
+      const members = Array.from({ length: n }, (_, i) => ({
+        id: `b${i}`,
+        name: BOT_NAMES[i],
+        seat: i,
+        profession: null,
+        bot: true,
+      }));
+      let s = createInitialState(`bot-${g}`, mode, members, rng);
+      const roles = Object.fromEntries(assignSecrets(mode, s.order, rng).map((x) => [x.userId, x.role]));
+      assert.equal(s.players.b0.bot, true);
+      let steps = 0;
+      let perTurn = 0;
+      let lastTurnKey = "";
+      while (s.phase !== "game_over") {
+        const me = s.order[s.turn];
+        const key = `${s.round}:${s.turn}`;
+        perTurn = key === lastTurnKey ? perTurn + 1 : 0;
+        lastTurnKey = key;
+        assert.ok(perTurn < 40, `bot macet di satu giliran (game ${g})`);
+        const action = decideBotAction(s, me, roles[me]);
+        s = applyAction(s, me, action, rng).state; // tidak boleh melempar error
+        assert.ok(++steps < 20000, `game ${g} kepanjangan`);
+      }
+      tally[s.result!.kind]++;
+    }
+    // Bot kooperatif harus kadang menang, tapi jangan terlalu gampang.
+    console.log("hasil bot:", tally);
+    assert.ok(tally.rakyat_menang > 0, "rakyat bot tidak pernah menang");
+    assert.ok(tally.rakyat_kalah > 0, "rakyat bot selalu menang");
   });
 });

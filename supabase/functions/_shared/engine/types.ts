@@ -63,6 +63,8 @@ export interface PlayerState {
   suaraRakyat: number;
   ordal: number;
   phkUntilRound: number;
+  /** true kalau pemain ini dijalankan komputer (main solo) */
+  bot?: boolean;
 }
 
 export interface TileState {
@@ -146,6 +148,7 @@ export interface MemberInput {
   name: string;
   seat: number;
   profession: Profession | null;
+  bot?: boolean;
 }
 
 export interface PlayerSecret {

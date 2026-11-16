@@ -45,6 +45,7 @@ export interface MemberRow {
   seat: number;
   display_name: string;
   profession: string | null;
+  is_bot: boolean;
 }
 
 export interface EventRow {
@@ -73,6 +74,9 @@ export const api = {
   startGame: (roomId: string) => call<GameRow>("start-game", { roomId }),
   action: (roomId: string, version: number, action: Action) =>
     call<GameRow>("game-action", { roomId, version, action }),
+  addBot: (roomId: string) => call<{ userId: string; seat: number; name: string }>("add-bot", { roomId }),
+  removeBot: (roomId: string, userId: string) => call<{ ok: boolean }>("remove-bot", { roomId, userId }),
+  botStep: (roomId: string, version: number) => call<GameRow>("bot-step", { roomId, version }),
   deleteAccount: () => call<{ ok: boolean }>("delete-account", {}),
 };
 
@@ -94,7 +98,7 @@ export async function getRoom(roomId: string): Promise<RoomRow> {
 export async function getMembers(roomId: string): Promise<MemberRow[]> {
   const { data, error } = await supabase
     .from("room_members")
-    .select("user_id, seat, display_name, profession")
+    .select("user_id, seat, display_name, profession, is_bot")
     .eq("room_id", roomId)
     .order("seat");
   if (error) throw new ApiError(error.message);

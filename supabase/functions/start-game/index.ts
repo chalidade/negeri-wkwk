@@ -22,10 +22,11 @@ Deno.serve(handler(async ({ admin, userId, body }) => {
   const rows = check(
     await admin
       .from("room_members")
-      .select("user_id, seat, display_name, profession")
+      .select("user_id, seat, display_name, profession, is_bot")
       .eq("room_id", roomId),
-  ) as { user_id: string; seat: number; display_name: string; profession: Profession | null }[];
+  ) as { user_id: string; seat: number; display_name: string; profession: Profession | null; is_bot: boolean }[];
   if (rows.length < 2) throw new HttpError(409, "kurang_pemain", "Butuh minimal 2 pemain.");
+  if (rows.every((r) => r.is_bot)) throw new HttpError(409, "kurang_pemain", "Butuh minimal 1 pemain manusia.");
 
   // Kunci: hanya satu request yang bisa mengubah status lobby -> playing.
   const locked = check(
@@ -43,6 +44,7 @@ Deno.serve(handler(async ({ admin, userId, body }) => {
     name: r.display_name,
     seat: r.seat,
     profession: r.profession,
+    bot: r.is_bot,
   }));
   const state = createInitialState(roomId, room.mode as Mode, members, cryptoRng);
   const secrets = assignSecrets(room.mode as Mode, state.order, cryptoRng);

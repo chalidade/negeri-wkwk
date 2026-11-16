@@ -28,7 +28,7 @@ insert into public.game_events (room_id, version, type, visible_to) values
 
 -- Profil otomatis dibuat oleh trigger
 do $$ begin
-  assert (select count(*) from public.profiles) = 3, 'trigger profil gagal';
+  assert (select count(*) from public.profiles where not is_bot) = 3, 'trigger profil gagal';
   assert (select display_name from public.profiles
           where id = '00000000-0000-0000-0000-00000000000c') like 'Warga%', 'nama default salah';
 end $$;
@@ -103,3 +103,10 @@ end $$;
 
 reset role;
 \echo 'SEMUA TES RLS LULUS'
+
+-- Bot: 5 akun bot tersedia dan bertanda is_bot
+do $$
+begin
+  assert (select count(*) from public.profiles where is_bot) = 5, 'harus ada 5 bot';
+end
+$$;

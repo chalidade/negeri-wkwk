@@ -235,6 +235,26 @@ async function homeScreen(): Promise<void> {
     }
   };
   const last = localStorage.getItem("lastRoom");
+  const soloBtn = h("button", { class: "btn alt block" }, "🤖 Main Solo vs 3 Bot");
+  soloBtn.onclick = async () => {
+    soloBtn.disabled = true;
+    try {
+      soloBtn.textContent = "⏳ Nyiapin room…";
+      const { roomId } = await api.createRoom(mode, prof.value || null);
+      localStorage.setItem("lastRoom", roomId);
+      for (let i = 0; i < 3; i++) {
+        soloBtn.textContent = `⏳ Manggil bot ${i + 1}/3…`;
+        await api.addBot(roomId);
+      }
+      soloBtn.textContent = "⏳ Mulai!";
+      await api.startGame(roomId);
+      void gameScreen(roomId);
+    } catch (e) {
+      toast(errorMessage(e));
+      soloBtn.disabled = false;
+      soloBtn.textContent = "🤖 Main Solo vs 3 Bot";
+    }
+  };
 
   show(
     h(
@@ -293,6 +313,7 @@ async function homeScreen(): Promise<void> {
             },
             "➕ Bikin Room",
           ),
+          soloBtn,
         ),
         h(
           "div",
@@ -340,6 +361,18 @@ async function lobbyScreen(roomId: string): Promise<void> {
   const list = h("div", { class: "col", style: "gap:8px" });
   const startBtn = h("button", { class: "btn block" }, "🚀 Mulai Permainan");
   const counter = h("label", {});
+  const addBotBtn = h("button", { class: "btn alt block" }, "🤖 Tambah Bot");
+  addBotBtn.addEventListener("click", async () => {
+    addBotBtn.disabled = true;
+    try {
+      await api.addBot(roomId);
+      await renderMembers();
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      addBotBtn.disabled = false;
+    }
+  });
 
   const renderMembers = async () => {
     const members = await getMembers(roomId);
@@ -353,15 +386,33 @@ async function lobbyScreen(roomId: string): Promise<void> {
           h(
             "div",
             { style: "flex:1" },
-            h("div", { class: "title", style: "font-size:17px" }, m.display_name),
+            h("div", { class: "title", style: "font-size:17px" }, `${m.is_bot ? "🤖 " : ""}${m.display_name}`),
             h("div", { class: "muted" }, m.profession ? PROFESSION_LABEL[m.profession] : "Profesi acak"),
           ),
           m.user_id === room.host_id && h("div", { class: "badge", style: "background:var(--gold);color:#000" }, "👑 Host"),
+          m.is_bot && room.host_id === me &&
+            h(
+              "button",
+              {
+                class: "iconbtn",
+                title: "Keluarkan bot",
+                onclick: async () => {
+                  try {
+                    await api.removeBot(roomId, m.user_id);
+                    await renderMembers();
+                  } catch (e) {
+                    toast(errorMessage(e));
+                  }
+                },
+              },
+              "✕",
+            ),
         ),
       ),
     );
     startBtn.disabled = members.length < 2;
-    startBtn.textContent = members.length < 2 ? "Tunggu minimal 2 warga" : "🚀 Mulai Permainan";
+    startBtn.textContent = members.length < 2 ? "Tunggu teman, atau tambah bot" : "🚀 Mulai Permainan";
+    addBotBtn.style.display = members.length >= room.max_players ? "none" : "";
   };
 
   startBtn.addEventListener("click", async () => {
@@ -402,6 +453,7 @@ async function lobbyScreen(roomId: string): Promise<void> {
         ),
         counter,
         list,
+        room.host_id === me ? addBotBtn : null,
         room.host_id === me ? startBtn : h("div", { class: "waiting" }, "⏳ Menunggu host memulai…"),
       ),
     ),
@@ -427,6 +479,7 @@ async function gameScreen(roomId: string): Promise<void> {
   let events: EventRow[] = await getEvents(roomId);
   let busy = false;
   let drawerOpen = false;
+  let disposed = false;
   const seenEvents = new Set(events.map((e) => e.id));
 
   // Tekstur papan memakai font web: pastikan sudah termuat sebelum digambar.
@@ -468,6 +521,40 @@ async function gameScreen(roomId: string): Promise<void> {
     renderBottom();
     if (drawerOpen) renderDrawer();
     if (state.phase === "game_over") showGameOver();
+    scheduleBot();
+  }
+
+  // --- penggerak bot: tiap pemain manusia "menyenggol" server saat giliran bot.
+  // Server yang memutuskan aksinya; jeda di sini supaya dadu & pion sempat terlihat.
+  let botTimer: ReturnType<typeof setTimeout> | undefined;
+  let botVersion = -1;
+  function scheduleBot(retry = false) {
+    const cur = state.players[state.order[state.turn]];
+    if (state.phase === "game_over" || !cur?.bot || !state.players[me]) return;
+    if (botVersion === version && !retry) return;
+    botVersion = version;
+    clearTimeout(botTimer);
+    // Habis lempar dadu tunggu animasi dadu + pion jalan; aksi lain lebih cepat.
+    const base = state.phase === "awaiting_roll" ? 1100 : 2500;
+    // Kalau ada beberapa manusia, yang kursinya belakangan menunggu lebih lama (cadangan).
+    const humans = playersInOrder(state).filter((p) => !p.bot);
+    const extra = Math.max(0, humans.findIndex((p) => p.id === me)) * 2500;
+    const at = version;
+    botTimer = setTimeout(async () => {
+      if (version !== at || disposed) return;
+      try {
+        const res = await api.botStep(roomId, at);
+        applyState(res.state, res.version);
+      } catch (e) {
+        if (e instanceof ApiError && (e.code === "state_basi" || e.code === "bukan_giliran_bot")) {
+          const g = await getGame(roomId).catch(() => null);
+          if (g) applyState(g.state, g.version);
+          return;
+        }
+        if (e instanceof ApiError && e.code === "bukan_pemain") return;
+        setTimeout(() => scheduleBot(true), 3000);
+      }
+    }, retry ? 0 : base + extra);
   }
 
   function onEvent(e: EventRow) {
@@ -517,7 +604,7 @@ async function gameScreen(roomId: string): Promise<void> {
             h(
               "div",
               {},
-              h("div", { class: "nm" }, `${p.name}${p.id === me ? " (kamu)" : ""}`),
+              h("div", { class: "nm" }, `${p.bot ? "🤖 " : ""}${p.name}${p.id === me ? " (kamu)" : ""}`),
               h("div", { class: "cu" }, `₵${p.cuan}${p.jailTurns > 0 ? " 🚓" : ""}`),
             ),
           ),
@@ -554,7 +641,8 @@ async function gameScreen(roomId: string): Promise<void> {
     } else if (meP.bankrupt) {
       actions = h("div", { class: "waiting" }, "💀 Kamu bangkrut. Dukung teman ya.");
     } else if (state.order[state.turn] !== me) {
-      actions = h("div", { class: "waiting" }, `⏳ Giliran ${state.players[state.order[state.turn]].name}…`);
+      const cur = state.players[state.order[state.turn]];
+      actions = h("div", { class: "waiting" }, cur.bot ? `🤖 ${cur.name} lagi mikir…` : `⏳ Giliran ${cur.name}…`);
     } else {
       const btns: HTMLElement[] = [];
       const add = (label: string, fn: () => void, kind = "", disabled = false) =>
@@ -732,6 +820,7 @@ async function gameScreen(roomId: string): Promise<void> {
   renderTop();
   renderBottom();
   if (state.phase === "game_over") showGameOver();
+  scheduleBot();
 
   const unsub = subscribeRoom(roomId, {
     onGame: (g) => applyState(g.state, g.version),
@@ -743,6 +832,8 @@ async function gameScreen(roomId: string): Promise<void> {
     if (g && g.version > version) applyState(g.state, g.version);
   }, 15000);
   cleanup = () => {
+    disposed = true;
+    clearTimeout(botTimer);
     unsub();
     clearInterval(poll);
     scene.dispose();
