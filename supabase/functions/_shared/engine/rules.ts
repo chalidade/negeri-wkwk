@@ -59,9 +59,29 @@ export const JURUS_DAMAGE = 7;
 // --- babak (tingkat kesulitan Rezim)
 export const MAX_BABAK = 10;
 /** Pengali nyawa Rezim per babak. */
-export const nyawaBabak = (level: number): number => 1.13 + 0.04 * (level - 1);
+export const nyawaBabak = (level: number): number => 1 + 0.04 * (level - 1);
 /** Pengali pungutan Rezim per babak. */
 export const pungutanBabak = (level: number): number => 1 + 0.045 * (level - 1);
+
+// --- izin usaha: jalur resmi vs uang pelicin
+/** Jalur resmi: harga + biaya izin. */
+export const IZIN_RESMI = 1.15;
+/** Uang pelicin: lebih murah, tapi bisa kena OTT dan menyuburkan Rezim. */
+export const HARGA_PELICIN = 0.85;
+export const PELUANG_OTT = 0.25;
+export const DENDA_OTT = 1_500_000;
+/** Kekuasaan Rezim yang pulih tiap suap berhasil. */
+export const PELICIN_REZIM = 2;
+
+// --- pinjol: uang cepat, bunga mencekik
+export const PINJOL_BUNGA_AWAL = 0.2;
+export const PINJOL_BUNGA_RONDE = 0.1;
+export const PINJOL_MAKS = 8_000_000;
+/** Potongan otomatis tiap gajian selama masih punya utang. */
+export const PINJOL_CICILAN = 1_000_000;
+/** Utang segini atau lebih: debt collector meneror, lewati giliran. */
+export const PINJOL_TEROR = 6_000_000;
+export const SEMANGAT_BANTU = 3;
 
 // --- buzzer: warga yang diam-diam dibayar Rezim
 export const SABOTASE_SEMANGAT = 10;

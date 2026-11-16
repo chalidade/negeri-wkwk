@@ -11,6 +11,8 @@ const SLIDES: [string, string, string][] = [
   ["🚘", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan ngawur, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
   ["🎴", "Dadu Nasib", "Sebagian kartu dan bencana ditentukan lemparan dadu: angka kecil mujur, angka besar apes. Kamu sendiri yang melempar."],
   ["🕵️", "Awas buzzer", "Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia, tapi kadang dipalsukan buat memfitnah. Yakin dulu, baru tuduh: cuma satu kesempatan."],
+  ["🤝", "Resmi atau pelicin", "Buka dan upgrade usaha lewat jalur resmi itu aman tapi mahal. Uang pelicin lebih murah, tapi 1 dari 4 kena OTT (denda dan ditahan), dan tiap suap bikin Rezim pulih."],
+  ["💸", "Pinjol dan gotong royong", "Kepepet? Pinjol cair seketika, tapi bunganya 20% di depan dan 10% tiap ronde. Warga lain bisa bantu melunasi lewat ⚡ Aksi → Bantu warga."],
   ["🌾", "Saling jaga", "Lumbung Bersama otomatis menalangi warga yang nggak sanggup bayar. Kalau 2 warga bangkrut, semua kalah."],
 ];
 

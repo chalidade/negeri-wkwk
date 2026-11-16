@@ -83,9 +83,14 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
   // Cadangan supaya tidak bangkrut kena pungli/kebijakan.
   const reserve = 2_500_000 * panik(s);
 
+
   if (s.phase === "awaiting_buy") {
     const idx = s.pendingTile ?? -1;
-    return p.cuan - hargaBeli(s, idx) >= reserve ? { type: "buy" } : { type: "skip_buy" };
+    // Buzzer selalu main pelicin (itu menyuburkan Rezim). Warga jujur baru nyogok kalau kepepet.
+    if (buzzer && p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) return { type: "buy", jalur: "pelicin" };
+    if (p.cuan - hargaBeli(s, idx) >= reserve) return { type: "buy" };
+    if (p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) return { type: "buy", jalur: "pelicin" };
+    return { type: "skip_buy" };
   }
   if (s.phase !== "awaiting_roll" && s.phase !== "awaiting_end") return { type: "end_turn" };
 
@@ -126,6 +131,16 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
     }
   });
   if (best >= 0 && p.cuan - biayaUpgrade(best) >= reserve * 2) return { type: "upgrade", tile: best };
+
+  // 4. Pinjol: lunasi begitu longgar, pinjam hanya kalau benar-benar bokek.
+  if (p.utang > 0 && p.cuan - p.utang >= reserve * 1.5) return { type: "bayar_utang", amount: p.utang };
+  if (p.cuan < 600_000 && p.utang === 0) return { type: "pinjol", amount: 2_000_000 };
+
+  // 5. Gotong royong: yang longgar membantu warga yang terlilit utang.
+  if (kawan && !s.sudahBantu && p.cuan >= reserve * 4) {
+    const susah = s.order.map((id) => s.players[id]).find((x) => x.id !== botId && !x.bankrupt && x.utang >= 1_000_000);
+    if (susah) return { type: "bantu", target: susah.id, amount: 1_000_000 };
+  }
 
   return { type: "end_turn" };
 }

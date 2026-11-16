@@ -8,6 +8,7 @@ const ALASAN_TILANG: Record<string, string> = {
   razia: "kena razia dadakan",
   diamankan: "\"diamankan\" aparat",
   dilaporkan: "dilaporkan buzzer",
+  ott: "kena OTT",
 };
 
 export function describe(e: GameEvent, s: GameState, me: string): string | null {
@@ -23,7 +24,7 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
     case "beli":
       return p.rebut
         ? `🚩 ${who} merebut ${tile(p.tile)} dari Rezim!`
-        : `🏪 ${who} buka lapak di ${tile(p.tile)} (${dr(p.harga)})`;
+        : `🏪 ${who} buka lapak di ${tile(p.tile)}${p.pelicin ? " lewat pelicin 🤝" : ""} (${dr(p.harga)})`;
     case "tak_mampu_beli":
       return `😮‍💨 ${who} nggak sanggup beli ${tile(p.tile)}`;
     case "lewati_beli":
@@ -90,6 +91,18 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
       return `🏚️ ${tile(p.tile)} milik ${name(e.actor)} rusak, turun jadi ${LEVEL_LABEL[Number(p.level)]}`;
     case "lumbung_disunat":
       return `✂️ Lumbung disunat ${dr(p.jumlah)}`;
+    case "ott":
+      return `🚨 ${who} kena OTT gara-gara uang pelicin`;
+    case "pinjol":
+      return `💸 ${who} ambil pinjol ${dr(p.jumlah)}`;
+    case "cicilan":
+      return `💸 Cicilan pinjol ${who.toLowerCase() === "kamu" ? "kamu" : who} dipotong ${dr(p.jumlah)}`;
+    case "bayar_utang":
+      return Number(p.sisa) === 0 ? `🎉 ${who} lunas dari pinjol` : `💸 ${who} bayar utang ${dr(p.jumlah)}`;
+    case "teror_dc":
+      return `📞 ${who} diteror debt collector, giliran depan dilewati`;
+    case "bantu":
+      return `🤝 ${who} membantu ${name(p.target)} ${dr(p.jumlah)}`;
     case "sabotase":
       return "🕵️ Ada buzzer beraksi!";
     case "jejak":

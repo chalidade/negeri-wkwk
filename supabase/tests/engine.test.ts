@@ -71,7 +71,7 @@ describe("giliran", () => {
     assert.equal(r.state.pendingTile, 4);
     r = act(r.state, "andi", { type: "buy" });
     assert.equal(r.state.tiles[4].owner, "andi");
-    assert.equal(r.state.players.andi.cuan, 20 * JT - 1.6 * JT);
+    assert.equal(r.state.players.andi.cuan, 20 * JT - R.bulat(1.6 * JT * R.IZIN_RESMI));
     assert.equal(r.state.semangat, R.SEMANGAT_BELI);
     assert.equal(r.state.phase, "awaiting_end");
   });
@@ -255,6 +255,59 @@ describe("dadu kendali, jurus, babak", () => {
   });
 });
 
+describe("hidup dipersulit: pelicin, OTT, pinjol, gotong royong", () => {
+  it("uang pelicin: lebih murah dan menyuburkan Rezim, tapi bisa kena OTT", () => {
+    const s = setup();
+    s.kekuasaan -= 10;
+    const tawaran = act(s, "andi", { type: "roll" }, [1, 3]).state; // petak 4, DR 1,6 jt
+    // angka OTT 90 > 25: lolos
+    const lolos = act(tawaran, "andi", { type: "buy", jalur: "pelicin" }, [90]);
+    assert.equal(lolos.state.tiles[4].owner, "andi");
+    assert.equal(lolos.state.players.andi.cuan, 20 * JT - R.bulat(1.6 * JT * R.HARGA_PELICIN));
+    assert.equal(lolos.state.kekuasaan, s.kekuasaan + R.PELICIN_REZIM);
+    // angka OTT 10 <= 25: tertangkap, izin batal, denda, ditahan
+    const kena = act(tawaran, "andi", { type: "buy", jalur: "pelicin" }, [10]);
+    assert.ok(types(kena).includes("ott"));
+    assert.equal(kena.state.tiles[4].owner, null);
+    assert.equal(kena.state.players.andi.cuan, 20 * JT - R.DENDA_OTT);
+    assert.equal(kena.state.players.andi.jailTurns, R.LAMA_TILANG);
+    assert.equal(kena.state.phase, "awaiting_end");
+  });
+
+  it("pinjol: cair seketika, utang berbunga, dicicil tiap gajian", () => {
+    let s = setup(2);
+    s = act(s, "andi", { type: "pinjol", amount: 2 * JT }).state;
+    assert.equal(s.players.andi.cuan, 22 * JT);
+    assert.equal(s.players.andi.utang, 2.4 * JT);
+    assert.throws(() => act(s, "andi", { type: "pinjol", amount: 6 * JT }), (e: GameError) => e.code === "limit_pinjol");
+    // lewat Gajian: cicilan DR 1 jt dipotong otomatis
+    s.players.andi.position = 30;
+    const gajian = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.ok(types(gajian).includes("cicilan"));
+    assert.equal(gajian.state.players.andi.utang, 1.4 * JT);
+    // akhir ronde: bunga 10%
+    s.turn = 1;
+    s.phase = "awaiting_end";
+    const ronde = act(s, "budi", { type: "end_turn" }, [4, 1, 1]);
+    assert.equal(ronde.state.players.andi.utang, R.bulat(2.4 * JT * 1.1));
+    // bayar lunas
+    const lunas = act(s, "budi", { type: "end_turn" }, [4, 1, 1]).state;
+    const bayar = act(lunas, "andi", { type: "bayar_utang", amount: 99 * JT });
+    assert.equal(bayar.state.players.andi.utang, 0);
+  });
+
+  it("gotong royong: bantuan melunasi utang teman dulu dan menaikkan Semangat", () => {
+    const s = setup();
+    s.players.budi.utang = 1.5 * JT;
+    const r = act(s, "andi", { type: "bantu", target: "budi", amount: 2 * JT });
+    assert.equal(r.state.players.budi.utang, 0);
+    assert.equal(r.state.players.budi.cuan, 20.5 * JT);
+    assert.equal(r.state.players.andi.cuan, 18 * JT);
+    assert.equal(r.state.semangat, R.SEMANGAT_BANTU);
+    assert.ok(r.state.players.andi.jasa > 0);
+  });
+});
+
 describe("Dadu Nasib & buzzer", () => {
   it("kartu Dadu Nasib: angka besar berarti apes", () => {
     const idx = NASIB_WNI.findIndex((c) => c.id === "ortu_sakit");
@@ -417,13 +470,19 @@ describe("simulasi", () => {
         if (s.phase === "awaiting_roll") {
           options.push({ type: "roll" }, { type: "roll", gaya: (["pelan", "sedang", "kencang"] as const)[rng.int(0, 2)] });
         }
-        if (s.phase === "awaiting_buy") options.push({ type: "buy" }, { type: "skip_buy" });
+        if (s.phase === "awaiting_buy") options.push({ type: "buy" }, { type: "buy", jalur: "pelicin" }, { type: "skip_buy" });
         if (s.phase === "awaiting_end") options.push({ type: "end_turn" });
         if (s.phase === "awaiting_roll" || s.phase === "awaiting_end") {
           if (rng.int(0, 9) === 0) options.push({ type: "petisi" }, { type: "liputan_media" });
           if (rng.int(0, 9) === 0) options.push({ type: "donasi_lumbung", amount: 500_000 });
           if (rng.int(0, 5) === 0) options.push({ type: "jurus" });
           if (rng.int(0, 7) === 0) options.push({ type: "sabotase" }, { type: "tuduh", target: `p${rng.int(0, n - 1)}` });
+          if (rng.int(0, 9) === 0) {
+            options.push({ type: "pinjol", amount: 1_500_000 }, { type: "bayar_utang", amount: 1_000_000 });
+            options.push({ type: "bantu", target: `p${rng.int(0, n - 1)}`, amount: 500_000 });
+            const punya = s.tiles.findIndex((t) => t.owner === me && t.level < 3);
+            if (punya >= 0) options.push({ type: "upgrade", tile: punya, jalur: "pelicin" });
+          }
           const mine = s.tiles.findIndex((t) => t.owner === me && t.level < 3);
           if (mine >= 0 && rng.int(0, 3) === 0) options.push({ type: "upgrade", tile: mine });
         }
@@ -433,7 +492,7 @@ describe("simulasi", () => {
         } catch (e) {
           if (!(e instanceof GameError)) throw e;
           // aksi opsional boleh ditolak (uang kurang, dll), aksi wajib tidak boleh
-          if (["roll", "end_turn", "skip_buy", "buy"].includes(action.type)) throw e;
+          if (["roll", "end_turn", "skip_buy"].includes(action.type)) throw e;
         }
         for (const pl of Object.values(s.players)) {
           assert.ok(Number.isFinite(pl.cuan));
@@ -441,6 +500,7 @@ describe("simulasi", () => {
           assert.equal(pl.cuan % 1000, 0, `uang bukan kelipatan 1.000: ${pl.cuan}`);
           assert.ok(pl.position >= 0 && pl.position < R.BOARD_SIZE);
           assert.ok(pl.jurus >= 0 && pl.jurus <= R.JURUS_PENUH && pl.jasa >= 0);
+          assert.ok(pl.utang >= 0 && pl.utang % 1000 === 0, `utang aneh: ${pl.utang}`);
         }
         assert.ok(s.semangat >= 0 && s.semangat < R.SEMANGAT_PENUH);
         assert.ok(s.kekuasaan >= 0 && s.kekuasaan <= s.kekuasaanMaks);

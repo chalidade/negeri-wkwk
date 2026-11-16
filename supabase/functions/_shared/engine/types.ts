@@ -51,6 +51,8 @@ export interface PlayerState {
   jailTurns: number;
   skipNext: boolean;
   bankrupt: boolean;
+  /** sisa utang pinjol, sudah termasuk bunga */
+  utang: number;
   /** isi tenaga jurus profesi: 0 sampai JURUS_PENUH */
   jurus: number;
   /** poin jasa melawan Rezim, penentu MVP */
@@ -124,6 +126,8 @@ export interface GameState {
   rollAgain: boolean;
   /** Petisi/Liputan sudah dipakai giliran ini */
   aksiDipakai: boolean;
+  /** sudah membantu warga lain giliran ini (bonus Semangat hanya sekali per giliran) */
+  sudahBantu: boolean;
   result: GameResult | null;
   /** event publik dari aksi terakhir, untuk animasi di klien */
   lastEvents: GameEvent[];
@@ -132,15 +136,21 @@ export interface GameState {
 /** Tenaga lemparan dadu: menentukan kisaran jumlah mata dadu. */
 export type Gaya = "pelan" | "sedang" | "kencang";
 
+/** Cara mengurus izin: resmi (mahal, aman) atau uang pelicin (murah, bisa kena OTT). */
+export type Jalur = "resmi" | "pelicin";
+
 export type Action =
   | { type: "roll"; gaya?: Gaya }
+  | { type: "pinjol"; amount: number }
+  | { type: "bayar_utang"; amount: number }
+  | { type: "bantu"; target: string; amount: number }
   | { type: "jurus" }
   | { type: "sabotase" }
   | { type: "tuduh"; target: string }
-  | { type: "buy" }
+  | { type: "buy"; jalur?: Jalur }
   | { type: "skip_buy" }
-  | { type: "upgrade"; tile: number }
-  | { type: "bayar_denda" }
+  | { type: "upgrade"; tile: number; jalur?: Jalur }
+  | { type: "bayar_denda"; jalur?: Jalur }
   | { type: "donasi_lumbung"; amount: number }
   | { type: "petisi" }
   | { type: "liputan_media" }

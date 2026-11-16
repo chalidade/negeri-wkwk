@@ -1,7 +1,7 @@
 // Helper inti: data papan, transfer uang, talangan, bangkrut, meter, dan akhir game.
 import board from "../board.json" with { type: "json" };
 import * as R from "./rules.ts";
-import type { GameEvent, GameResult, GameState, PlayerState, Rng, TileDef } from "./types.ts";
+import type { GameEvent, GameResult, GameState, Jalur, PlayerState, Rng, TileDef } from "./types.ts";
 import { GOV } from "./types.ts";
 
 export const TILES: TileDef[] = (board as { tiles: TileDef[] }).tiles;
@@ -254,13 +254,25 @@ export function cekKampung(ctx: Ctx, group: string | undefined): void {
 // ---------------------------------------------------------------------------
 
 /** Harga beli petak kosong, atau harga merebutnya dari Rezim. */
-export function hargaBeli(s: GameState, idx: number): number {
+export function hargaBeli(s: GameState, idx: number, jalur: Jalur = "resmi"): number {
   const price = TILES[idx].price ?? 0;
-  return s.tiles[idx].owner === GOV ? R.bulat(price * R.REBUT_PENGALI) : price;
+  // Merebut aset dari Rezim tidak bisa lewat pelicin.
+  if (s.tiles[idx].owner === GOV) return R.bulat(price * R.REBUT_PENGALI);
+  return R.bulat(price * (jalur === "pelicin" ? R.HARGA_PELICIN : R.IZIN_RESMI));
 }
 
-export function biayaUpgrade(idx: number): number {
-  return R.bulat((TILES[idx].price ?? 0) * R.BIAYA_UPGRADE);
+export function biayaUpgrade(idx: number, jalur: Jalur = "resmi"): number {
+  const dasar = (TILES[idx].price ?? 0) * R.BIAYA_UPGRADE;
+  return R.bulat(dasar * (jalur === "pelicin" ? R.HARGA_PELICIN : R.IZIN_RESMI));
+}
+
+/** Uang pelicin ketahuan: denda, ditahan, dan urusannya batal. Mengembalikan true kalau kena. */
+export function kenaOTT(ctx: Ctx, id: string): boolean {
+  if (ctx.rng.int(1, 100) > R.PELUANG_OTT * 100) return false;
+  emit(ctx, { type: "ott", actor: id, payload: { denda: R.DENDA_OTT } });
+  transfer(ctx, id, GOV, R.DENDA_OTT);
+  if (!player(ctx.s, id).bankrupt) sendToJail(ctx, id, "ott");
+  return true;
 }
 
 /** Sewa penuh sebuah usaha rakyat pada level sekarang. */

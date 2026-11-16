@@ -17,6 +17,9 @@ import {
   endGame,
   hargaBeli,
   hitRezim,
+  healRezim,
+  jasa,
+  kenaOTT,
   isOver,
   isRakyat,
   omzetUsaha,
@@ -35,6 +38,7 @@ import {
   type Action,
   type Gaya,
   type GameEvent,
+  type Jalur,
   type GameState,
   type MemberInput,
   type Mode,
@@ -72,6 +76,7 @@ export function createInitialState(
       jailTurns: 0,
       skipNext: false,
       bankrupt: false,
+      utang: 0,
       jurus: R.JURUS_AWAL,
       jasa: 0,
       ...(m.bot ? { bot: true } : {}),
@@ -119,6 +124,7 @@ export function createInitialState(
     doublesInRow: 0,
     rollAgain: false,
     aksiDipakai: false,
+    sudahBantu: false,
     result: null,
     lastEvents: [],
   };
@@ -166,6 +172,18 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
       requirePhase(s, "awaiting_roll", "awaiting_end");
       doJurus(ctx, actor);
       break;
+    case "pinjol":
+      requirePhase(s, "awaiting_roll", "awaiting_end", "awaiting_buy");
+      doPinjol(ctx, actor, action.amount);
+      break;
+    case "bayar_utang":
+      requirePhase(s, "awaiting_roll", "awaiting_end");
+      doBayarUtang(ctx, actor, action.amount);
+      break;
+    case "bantu":
+      requirePhase(s, "awaiting_roll", "awaiting_end");
+      doBantu(ctx, actor, action.target, action.amount);
+      break;
     case "sabotase":
       requirePhase(s, "awaiting_roll", "awaiting_end");
       if (s.rahasia.buzzer !== actor.id || actor.buzzer) throw new GameError("bukan_buzzer", "Aksi tidak dikenal.");
@@ -178,7 +196,7 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
       break;
     case "buy":
       requirePhase(s, "awaiting_buy");
-      doBuy(ctx, actor);
+      doBuy(ctx, actor, action.jalur);
       break;
     case "skip_buy":
       requirePhase(s, "awaiting_buy");
@@ -187,11 +205,11 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
       break;
     case "bayar_denda":
       requirePhase(s, "awaiting_roll");
-      doPayFine(ctx, actor);
+      doPayFine(ctx, actor, action.jalur);
       break;
     case "upgrade":
       requirePhase(s, "awaiting_roll", "awaiting_end");
-      doUpgrade(ctx, actor, action.tile);
+      doUpgrade(ctx, actor, action.tile, action.jalur);
       break;
     case "donasi_lumbung":
       requirePhase(s, "awaiting_roll", "awaiting_end");
@@ -317,6 +335,11 @@ function payday(ctx: Ctx, p: PlayerState): void {
   transfer(ctx, BANK, p.id, gaji + omzet - iuran);
   transfer(ctx, BANK, LUMBUNG, iuran);
   emit(ctx, { type: "gajian", actor: p.id, payload: { gaji, omzet, iuran } });
+  if (p.utang > 0) {
+    const cicil = transfer(ctx, p.id, BANK, Math.min(p.utang, R.PINJOL_CICILAN, Math.max(0, p.cuan)));
+    p.utang -= cicil;
+    if (cicil > 0) emit(ctx, { type: "cicilan", actor: p.id, payload: { jumlah: cicil, sisa: p.utang } });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -391,7 +414,7 @@ function resolveTile(ctx: Ctx, p: PlayerState): void {
 function offerBuy(ctx: Ctx, p: PlayerState, idx: number, rebut: boolean): boolean {
   const s = ctx.s;
   const harga = hargaBeli(s, idx);
-  if (p.cuan < harga) {
+  if (p.cuan < hargaBeli(s, idx, "pelicin")) {
     if (!rebut) emit(ctx, { type: "tak_mampu_beli", actor: p.id, payload: { tile: idx, harga } });
     return false;
   }
@@ -442,45 +465,91 @@ function finishResolution(ctx: Ctx): void {
 // Aksi ekonomi & perlawanan
 // ---------------------------------------------------------------------------
 
-function doBuy(ctx: Ctx, p: PlayerState): void {
+function doBuy(ctx: Ctx, p: PlayerState, jalur: Jalur = "resmi"): void {
   const s = ctx.s;
   const idx = s.pendingTile!;
   const tile = s.tiles[idx];
   const rebut = tile.owner === GOV;
-  const harga = hargaBeli(s, idx);
+  const pelicin = !rebut && jalur === "pelicin";
+  const harga = hargaBeli(s, idx, pelicin ? "pelicin" : "resmi");
   if (p.cuan < harga) throw new GameError("uang_kurang", "Uangmu nggak cukup.");
-  transfer(ctx, p.id, rebut ? GOV : BANK, harga);
+  if (pelicin && kenaOTT(ctx, p.id)) return finishResolution(ctx); // izinnya batal, petak tetap kosong
+  transfer(ctx, p.id, rebut || pelicin ? GOV : BANK, harga);
   tile.owner = p.id; // bangunan Rezim ikut jadi milikmu kalau direbut
-  emit(ctx, { type: "beli", actor: p.id, payload: { tile: idx, harga, rebut } });
+  emit(ctx, { type: "beli", actor: p.id, payload: { tile: idx, harga, rebut, pelicin } });
+  if (pelicin) healRezim(ctx, R.PELICIN_REZIM, "pelicin");
   addSemangat(ctx, R.SEMANGAT_BELI, rebut ? "rebut_aset" : "usaha_baru");
   if (rebut) hitRezim(ctx, R.REBUT_DAMAGE, "rebut_aset");
   cekKampung(ctx, TILES[idx].group);
   finishResolution(ctx);
 }
 
-function doPayFine(ctx: Ctx, p: PlayerState): void {
+function doPayFine(ctx: Ctx, p: PlayerState, jalur: Jalur = "resmi"): void {
   if (p.jailTurns === 0) throw new GameError("tidak_ditilang", "Kamu nggak lagi ditilang.");
-  const fine = R.bulat(R.DENDA_TILANG);
+  // "Damai di tempat": separuh harga, tapi kalau ketahuan malah tambah parah.
+  const fine = R.bulat(R.DENDA_TILANG * (jalur === "pelicin" ? 0.5 : 1));
   if (p.cuan < fine) throw new GameError("uang_kurang", "Uangmu nggak cukup buat bayar denda.");
+  if (jalur === "pelicin" && kenaOTT(ctx, p.id)) return;
   transfer(ctx, p.id, GOV, fine);
   p.jailTurns = 0;
-  emit(ctx, { type: "bayar_denda", actor: p.id, payload: { jumlah: fine } });
-  addSemangat(ctx, R.SEMANGAT_PUNGLI, "pungli", true);
+  emit(ctx, { type: "bayar_denda", actor: p.id, payload: { jumlah: fine, pelicin: jalur === "pelicin" } });
+  if (jalur === "pelicin") healRezim(ctx, R.PELICIN_REZIM, "pelicin");
+  else addSemangat(ctx, R.SEMANGAT_PUNGLI, "pungli", true);
 }
 
-function doUpgrade(ctx: Ctx, p: PlayerState, idx: number): void {
+function doUpgrade(ctx: Ctx, p: PlayerState, idx: number, jalur: Jalur = "resmi"): void {
   const s = ctx.s;
   const def = TILES[idx];
   if (!def || def.type !== "property") throw new GameError("bukan_usaha", "Petak ini bukan usaha.");
   const tile = s.tiles[idx];
   if (tile.owner !== p.id) throw new GameError("bukan_milikmu", "Usaha ini bukan milikmu.");
   if (tile.level >= R.MAX_LEVEL) throw new GameError("level_maks", "Usaha ini sudah Brand Lokal.");
-  const cost = biayaUpgrade(idx);
+  const cost = biayaUpgrade(idx, jalur);
   if (p.cuan < cost) throw new GameError("uang_kurang", "Uangmu nggak cukup buat upgrade.");
-  transfer(ctx, p.id, BANK, cost);
+  if (jalur === "pelicin" && kenaOTT(ctx, p.id)) return;
+  transfer(ctx, p.id, jalur === "pelicin" ? GOV : BANK, cost);
   tile.level += 1;
-  emit(ctx, { type: "upgrade", actor: p.id, payload: { tile: idx, level: tile.level, biaya: cost } });
+  emit(ctx, { type: "upgrade", actor: p.id, payload: { tile: idx, level: tile.level, biaya: cost, pelicin: jalur === "pelicin" } });
+  if (jalur === "pelicin") healRezim(ctx, R.PELICIN_REZIM, "pelicin");
   addSemangat(ctx, R.SEMANGAT_UPGRADE, "upgrade");
+}
+
+/** Pinjol: uang cair seketika, utang langsung ditambah bunga, lalu berbunga lagi tiap ronde. */
+function doPinjol(ctx: Ctx, p: PlayerState, amount: number): void {
+  if (!Number.isInteger(amount) || amount < 1_000_000 || amount % 500_000 !== 0) {
+    throw new GameError("jumlah_tidak_valid", "Pinjaman minimal DR 1 jt, kelipatan DR 500 rb.");
+  }
+  const utang = R.bulat(amount * (1 + R.PINJOL_BUNGA_AWAL));
+  if (p.utang + utang > R.PINJOL_MAKS) throw new GameError("limit_pinjol", "Limit pinjolmu sudah mentok.");
+  transfer(ctx, BANK, p.id, amount);
+  p.utang += utang;
+  emit(ctx, { type: "pinjol", actor: p.id, payload: { jumlah: amount, utang: p.utang } });
+}
+
+function doBayarUtang(ctx: Ctx, p: PlayerState, amount: number): void {
+  const bayar = Math.min(amount, p.utang, p.cuan);
+  if (!Number.isInteger(amount) || bayar <= 0) throw new GameError("jumlah_tidak_valid", "Tidak ada utang yang bisa dibayar.");
+  transfer(ctx, p.id, BANK, bayar);
+  p.utang -= bayar;
+  emit(ctx, { type: "bayar_utang", actor: p.id, payload: { jumlah: bayar, sisa: p.utang } });
+}
+
+/** Gotong royong: bantu warga lain. Uangnya melunasi utang pinjolnya dulu, sisanya jadi pegangan. */
+function doBantu(ctx: Ctx, p: PlayerState, targetId: string, amount: number): void {
+  const s = ctx.s;
+  const target = s.players[targetId];
+  if (!target || target.id === p.id || target.bankrupt) throw new GameError("target_tidak_valid", "Warga itu tidak bisa dibantu.");
+  if (!Number.isInteger(amount) || amount <= 0 || amount > p.cuan) throw new GameError("uang_kurang", "Uangmu nggak cukup.");
+  const lunas = Math.min(amount, target.utang);
+  target.utang -= lunas;
+  transfer(ctx, p.id, BANK, lunas);
+  transfer(ctx, p.id, target.id, amount - lunas);
+  emit(ctx, { type: "bantu", actor: p.id, payload: { target: target.id, jumlah: amount, lunas } });
+  jasa(ctx, p.id, amount / 250_000);
+  if (!s.sudahBantu && amount >= 500_000) {
+    s.sudahBantu = true;
+    addSemangat(ctx, R.SEMANGAT_BANTU, "gotong_royong", true);
+  }
 }
 
 function doDonasi(ctx: Ctx, p: PlayerState, amount: number): void {
@@ -564,6 +633,7 @@ function advanceTurn(ctx: Ctx): void {
   s.doublesInRow = 0;
   s.rollAgain = false;
   s.aksiDipakai = false;
+  s.sudahBantu = false;
   s.pendingTile = null;
 
   const n = s.order.length;
@@ -588,6 +658,16 @@ function endRound(ctx: Ctx): void {
   const s = ctx.s;
   rezimTurn(ctx);
   if (isOver(s)) return;
+
+  // Bunga pinjol jalan terus. Utang menumpuk: debt collector meneror sampai tak bisa kerja.
+  for (const p of alivePlayers(s)) {
+    if (p.utang <= 0) continue;
+    p.utang = R.bulat(p.utang * (1 + R.PINJOL_BUNGA_RONDE));
+    if (p.utang >= R.PINJOL_TEROR) {
+      p.skipNext = true;
+      emit(ctx, { type: "teror_dc", actor: p.id, payload: { utang: p.utang } });
+    }
+  }
 
   s.round += 1;
   if (s.round > s.maxRounds) {
@@ -729,7 +809,7 @@ function doTuduh(ctx: Ctx, p: PlayerState, targetId: string): void {
 }
 
 export function netWorth(s: GameState, p: PlayerState): number {
-  let total = p.cuan;
+  let total = p.cuan - p.utang;
   s.tiles.forEach((t, idx) => {
     if (t.owner === p.id) {
       const price = TILES[idx].price ?? 0;
