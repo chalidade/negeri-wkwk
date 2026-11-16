@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../theme.dart';
+
 /// Masuk sebagai tamu (anonymous sign-in Supabase) cukup dengan nama.
 /// Aktifkan "Allow anonymous sign-ins" di Supabase > Authentication > Sign In / Providers.
 class LoginScreen extends StatefulWidget {
@@ -60,7 +62,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     'Negeri Wkwk',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w900),
+                    style: titleFont(
+                      size: 44,
+                      color: Palette.gold,
+                      shadows: const [Shadow(color: Palette.red, offset: Offset(3, 3))],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

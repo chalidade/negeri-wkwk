@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 
@@ -21,13 +22,9 @@ class NegeriWkwkApp extends StatelessWidget {
     return MaterialApp(
       title: 'Negeri Wkwk',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFC62828)),
-        useMaterial3: true,
-      ),
+      theme: buildTheme(),
       // Di web/tablet, tampilkan selebar HP supaya papan tidak kebesaran.
-      builder: (context, child) => ColoredBox(
-        color: const Color(0xFFEFE7E1),
+      builder: (context, child) => GameBackground(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),

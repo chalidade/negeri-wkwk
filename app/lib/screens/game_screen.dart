@@ -6,6 +6,8 @@ import '../models/event_text.dart';
 import '../models/game_state.dart';
 import '../models/rules_mirror.dart' as rules;
 import '../services/api.dart';
+import '../theme.dart';
+import '../widgets/board3d.dart';
 import '../widgets/board_view.dart';
 
 class GameScreen extends StatefulWidget {
@@ -149,34 +151,32 @@ class _GameScreenState extends State<GameScreen> {
             }
             return Scaffold(
               appBar: AppBar(
-                title: Text('Ronde ${game.round}/${game.maxRounds}'),
-                actions: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Center(child: Text('📈 Inflasi ${game.inflationLevel}')),
-                  ),
-                ],
+                titleSpacing: 12,
+                title: Row(children: [
+                  _HudChip(icon: '🗓️', text: 'Ronde ${game.round}/${game.maxRounds}'),
+                  const SizedBox(width: 8),
+                  _HudChip(icon: '📈', text: 'Inflasi ${game.inflationLevel}'),
+                ]),
               ),
               body: ListView(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),
                 children: [
                   if (game.isOver) _GameOverCard(game: game, me: _me),
                   if (game.isRakyatBersatu) _Meters(game: game),
-                  const SizedBox(height: 6),
-                  BoardView(
+                  const SizedBox(height: 4),
+                  Board3D(
                     board: board,
                     game: game,
                     onTapTile: (i) => _showTile(board, game, i),
-                    center: _BoardCenter(game: game),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   _PlayersRow(game: game),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   FutureBuilder<PlayerSecret?>(
                     future: _secret,
                     builder: (context, s) => _MyPanel(game: game, me: _me, secret: s.data),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   _EventLog(stream: _events, game: game, board: board),
                 ],
               ),
@@ -206,9 +206,13 @@ class _GameScreenState extends State<GameScreen> {
     void add(String label, VoidCallback? onTap, {bool primary = false}) {
       buttons.add(Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: primary
-            ? FilledButton(onPressed: _busy ? null : onTap, child: Text(label))
-            : OutlinedButton(onPressed: _busy ? null : onTap, child: Text(label)),
+        child: GameButton(
+          label: label,
+          onPressed: _busy ? null : onTap,
+          color: primary ? Palette.gold : const Color(0xFF5B3A8C),
+          textColor: primary ? Colors.black : Colors.white,
+          small: !primary,
+        ),
       ));
     }
 
@@ -251,12 +255,16 @@ class _GameScreenState extends State<GameScreen> {
       });
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xCC170E2E),
+        border: Border(top: BorderSide(color: Palette.panelBorder)),
+      ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Row(children: buttons),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: buttons),
       ),
     );
   }
@@ -267,10 +275,30 @@ class _BarMessage extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
-        child: Text(text, textAlign: TextAlign.center),
+        color: const Color(0xCC170E2E),
+        child: Text(text, textAlign: TextAlign.center, style: titleFont(size: 16)),
       );
+}
+
+class _HudChip extends StatelessWidget {
+  const _HudChip({required this.icon, required this.text});
+  final String icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Palette.panel,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Palette.panelBorder),
+      ),
+      child: Text('$icon $text', style: titleFont(size: 15)),
+    );
+  }
 }
 
 class _Meters extends StatelessWidget {
@@ -279,58 +307,50 @@ class _Meters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget bar(String label, int value, Color color) => Expanded(
+    Widget bar(String icon, String label, int value, Color color) => Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text('$label $value', style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 2),
-                LinearProgressIndicator(
-                  value: value / 100,
-                  color: color,
-                  backgroundColor: color.withValues(alpha: 0.15),
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(4),
+                Text(icon, style: const TextStyle(fontSize: 22)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$label $value', style: titleFont(size: 13)),
+                      const SizedBox(height: 3),
+                      Container(
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: Colors.black38,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: (value / 100).clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color.lerp(color, Colors.white, 0.35)!, color],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         );
     return Row(children: [
-      bar('✊ Gerakan', game.gerakan, Colors.red.shade700),
-      bar('😤 Kesabaran', game.kesabaran, Colors.orange.shade700),
+      bar('✊', 'Gerakan', game.gerakan, Palette.red),
+      bar('😤', 'Kesabaran', game.kesabaran, const Color(0xFFFF9F1C)),
     ]);
-  }
-}
-
-class _BoardCenter extends StatelessWidget {
-  const _BoardCenter({required this.game});
-  final GameState game;
-
-  @override
-  Widget build(BuildContext context) {
-    final dice = game.lastDice;
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('NEGERI WKWK',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 2)),
-            const SizedBox(height: 8),
-            if (dice != null && dice.length == 2)
-              Text('🎲 ${dice[0]}  🎲 ${dice[1]}', style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 8),
-            if (game.isRakyatBersatu) Text('🌾 Lumbung Bersama ₵${game.lumbung}'),
-            Text('🏛️ Kas Pemerintah ₵${game.kasPemerintah}'),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -340,26 +360,67 @@ class _PlayersRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final p in game.playersInOrder)
-          Chip(
-            avatar: CircleAvatar(backgroundColor: colorForSeat(p.seat), radius: 8),
-            side: p.id == game.currentPlayerId && !game.isOver
-                ? BorderSide(color: Colors.amber.shade700, width: 2)
-                : null,
-            label: Text(
-              '${professionEmoji[p.profession] ?? ''} ${p.name} ₵${p.cuan}'
-              '${p.jailTurns > 0 ? ' 🚓' : ''}',
-              style: TextStyle(
-                decoration: p.bankrupt ? TextDecoration.lineThrough : null,
-                fontSize: 12,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final p in game.playersInOrder)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _PlayerPill(
+                player: p,
+                active: !game.isOver && p.id == game.currentPlayerId,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlayerPill extends StatelessWidget {
+  const _PlayerPill({required this.player, required this.active});
+  final PlayerState player;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorForSeat(player.seat);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+      decoration: BoxDecoration(
+        color: active ? color.withValues(alpha: 0.35) : Palette.panel,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: active ? Palette.gold : Palette.panelBorder, width: active ? 2 : 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: color,
+            child: Text(professionEmoji[player.profession] ?? '🙂', style: const TextStyle(fontSize: 16)),
           ),
-      ],
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                player.bankrupt ? '💀 ${player.name}' : player.name,
+                style: titleFont(size: 13).copyWith(
+                  decoration: player.bankrupt ? TextDecoration.lineThrough : null,
+                ),
+              ),
+              Text(
+                '₵${player.cuan}${player.jailTurns > 0 ? '  🚓' : ''}',
+                style: const TextStyle(fontSize: 12, color: Palette.gold, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -374,35 +435,54 @@ class _MyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = game.players[me];
     if (p == null) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Text('${professionEmoji[p.profession]} ${professionLabels[p.profession]}',
-                  style: theme.textTheme.titleMedium),
-              const Spacer(),
-              if (secret != null)
-                Chip(
-                  label: Text(secret!.isBuzzer ? '🕵️ Kamu BUZZER' : '✊ Rakyat'),
-                  backgroundColor: secret!.isBuzzer ? Colors.red.shade100 : Colors.green.shade100,
-                ),
-            ]),
-            const SizedBox(height: 4),
-            Text('💰 Cuan ₵${p.cuan}   🐷 Tabungan ₵${p.tabungan}'),
-            Text('🗳️ Suara Rakyat ${p.suaraRakyat}   🤫 Kecurigaan ${p.kecurigaan}   🎟️ Ordal ${p.ordal}'),
+    Widget stat(String icon, String label, String value) => Expanded(
+          child: Column(
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 22)),
+              Text(value, style: titleFont(size: 16, color: Palette.gold)),
+              Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+            ],
+          ),
+        );
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Text('${professionEmoji[p.profession]} ', style: const TextStyle(fontSize: 22)),
+            Text(professionLabels[p.profession] ?? '', style: titleFont(size: 18)),
+            const Spacer(),
             if (secret != null)
-              Text('🌟 Mimpi pribadi: ${mimpiLabels[secret!.mimpi] ?? secret!.mimpi}'),
-            if (secret?.isBuzzer == true)
-              Text(
-                'Rahasiakan peranmu! Tugasmu: jaga rezim tetap berkuasa. Kemampuan Buzzer menyusul.',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.red.shade800),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: secret!.isBuzzer ? Palette.red : Palette.green,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(secret!.isBuzzer ? '🕵️ BUZZER' : '✊ RAKYAT', style: titleFont(size: 13)),
               ),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            stat('💰', 'Cuan', '₵${p.cuan}'),
+            stat('🐷', 'Tabungan', '₵${p.tabungan}'),
+            stat('🗳️', 'Suara', '${p.suaraRakyat}'),
+            stat('🤫', 'Curiga', '${p.kecurigaan}'),
+          ]),
+          if (secret != null) ...[
+            const SizedBox(height: 10),
+            Text('🌟 Mimpi pribadi: ${mimpiLabels[secret!.mimpi] ?? secret!.mimpi}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
           ],
-        ),
+          if (secret?.isBuzzer == true)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Rahasiakan peranmu! Tugasmu: jaga rezim tetap berkuasa.',
+                style: TextStyle(fontSize: 12, color: Color(0xFFFFA8A8)),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -416,32 +496,36 @@ class _EventLog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: StreamBuilder<List<GameEventRow>>(
-          stream: stream,
-          builder: (context, snap) {
-            final lines = (snap.data ?? const <GameEventRow>[])
-                .map((e) => describeEvent(e, game, board))
-                .whereType<String>()
-                .take(25)
-                .toList();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Kabar Terkini', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 6),
-                if (lines.isEmpty) const Text('Belum ada kabar.'),
-                for (final l in lines)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(l, style: const TextStyle(fontSize: 13)),
+    return Panel(
+      child: StreamBuilder<List<GameEventRow>>(
+        stream: stream,
+        builder: (context, snap) {
+          final lines = (snap.data ?? const <GameEventRow>[])
+              .map((e) => describeEvent(e, game, board))
+              .whereType<String>()
+              .take(25)
+              .toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('📢 Kabar Terkini', style: titleFont(size: 17)),
+              const SizedBox(height: 8),
+              if (lines.isEmpty) const Text('Belum ada kabar.'),
+              for (var i = 0; i < lines.length; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Text(
+                    lines[i],
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: i == 0 ? Colors.white : Colors.white70,
+                      fontWeight: i == 0 ? FontWeight.w800 : FontWeight.w500,
+                    ),
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -461,15 +545,24 @@ class _GameOverCard extends StatelessWidget {
     final ranking = [...game.playersInOrder]
       ..sort((a, b) => (b.cuan + b.tabungan).compareTo(a.cuan + a.tabungan));
 
-    return Card(
-      color: menang ? Colors.green.shade50 : Colors.red.shade50,
-      child: Padding(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: menang
+                ? [const Color(0xFF1E7F4A), Palette.green]
+                : [const Color(0xFF7A1C2A), Palette.red],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Palette.gold, width: 2),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(menang ? '🎉 ${resultText(result)}' : '😭 ${resultText(result)}',
-                style: Theme.of(context).textTheme.titleLarge),
+                style: titleFont(size: 22)),
             const SizedBox(height: 8),
             Text('Bertahan sampai ronde ${game.round}. Meter Gerakan akhir: ${game.gerakan}/${rules.gerakanMenang}.'),
             const SizedBox(height: 8),
@@ -481,9 +574,9 @@ class _GameOverCard extends StatelessWidget {
             const SizedBox(height: 8),
             const Text('💡 Tips: sisihkan Tabungan Darurat 3x gaji, dan jauhi pinjol ilegal.'),
             const SizedBox(height: 12),
-            FilledButton(
+            GameButton(
+              label: 'Kembali ke Beranda',
               onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
-              child: const Text('Kembali ke Beranda'),
             ),
           ],
         ),
