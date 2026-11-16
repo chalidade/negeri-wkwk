@@ -395,7 +395,7 @@ export class GameScene {
       // dengan ruang untuk HUD di atas dan bawah.
       const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
       const byWidth = 13.8 / (tan * this.camera.aspect);
-      const byHeight = 15.5 / tan;
+      const byHeight = 12 / tan;
       const dist = THREE.MathUtils.clamp(Math.max(byWidth, byHeight), 26, 90);
       const dir = new THREE.Vector3(0, 1.25, 1).normalize();
       this.camera.position.copy(this.controls.target).addScaledVector(dir, dist);
