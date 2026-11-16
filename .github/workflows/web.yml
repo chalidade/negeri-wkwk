@@ -1,0 +1,38 @@
+name: Web build
+
+# Build versi web aplikasi untuk preview cepat (screenshot, uji di browser).
+# URL dan publishable key di bawah memang boleh publik (aman karena dilindungi RLS).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SUPABASE_URL: https://smvkbqfffynhtejwvkuj.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_GxiH2VpHQjzFd7HHJ-rDdA_4sCDhh6b
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Siapkan platform web
+        run: flutter create . --platforms=web --project-name negeri_wkwk
+      - run: flutter pub get
+      - name: Build web
+        run: >
+          flutter build web --release --no-web-resources-cdn --base-href /
+          --dart-define=SUPABASE_URL=$SUPABASE_URL
+          --dart-define=SUPABASE_ANON_KEY=$SUPABASE_PUBLISHABLE_KEY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: negeri-wkwk-web
+          path: app/build/web
+          retention-days: 14

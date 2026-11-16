@@ -1,0 +1,21 @@
+# Konfigurasi Supabase CLI & GitHub integration.
+# Integrasi GitHub men-deploy migration dan Edge Functions yang terdaftar di bawah
+# setiap ada push ke branch main.
+# verify_jwt = false karena login sudah dicek di dalam function (handler di _shared/http.ts),
+# dan project memakai publishable key baru yang bukan JWT.
+project_id = "negeri-wkwk"
+
+[functions.create-room]
+verify_jwt = false
+
+[functions.join-room]
+verify_jwt = false
+
+[functions.start-game]
+verify_jwt = false
+
+[functions.game-action]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false
