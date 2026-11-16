@@ -39,9 +39,12 @@ jobs:
           name: negeri-wkwk-web
           path: app/build/web
           retention-days: 14
-      - name: Simpan hasil build ke branch web-preview
-        working-directory: app/build/web
+      - name: Simpan hasil build ke branch web-preview (folder public/ untuk Vercel)
         run: |
+          out="$RUNNER_TEMP/web-preview"
+          mkdir -p "$out/public"
+          cp -r build/web/. "$out/public/"
+          cd "$out"
           git init -q -b web-preview
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
