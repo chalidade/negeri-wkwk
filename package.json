@@ -1,0 +1,13 @@
+{
+  "name": "negeri-wkwk",
+  "private": true,
+  "type": "module",
+  "description": "Game papan satire online: rakyat bersatu melawan Pemerintah.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test supabase/tests/engine.test.ts",
+    "test:db": "bash supabase/tests/run_db_tests.sh"
+  }
+}

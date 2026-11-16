@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+supabase/.branches/
+supabase/.temp/
+.DS_Store
+# Flutter (nanti)
+build/
+.dart_tool/
