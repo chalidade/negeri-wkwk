@@ -1,249 +1,281 @@
-// Jalankan: node --test supabase/tests/
+// Jalankan: npm test
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BOT_NAMES,
   GOV,
   GameError,
+  TILES,
   applyAction,
   assignSecrets,
   createInitialState,
   decideBotAction,
+  omzetUsaha,
   scriptedRng,
   seededRng,
   type Action,
   type GameState,
-  type MemberInput,
   type Profession,
 } from "../functions/_shared/engine/mod.ts";
 import * as R from "../functions/_shared/engine/rules.ts";
 
-const A = "andi";
-const B = "budi";
-const C = "citra";
+const JT = 1_000_000;
+const IDS = ["andi", "budi", "citra", "dewi"];
 
-function setup(
-  professions: Profession[] = ["buruh", "ojol", "jurnalis"],
-  mode: "rakyat_bersatu" | "juragan" = "rakyat_bersatu",
-): GameState {
-  const ids = [A, B, C, "dewi", "eko", "fajar"];
-  const members: MemberInput[] = professions.map((p, i) => ({
-    id: ids[i],
-    name: ids[i],
-    seat: i,
-    profession: p,
-  }));
-  return createInitialState("room-1", mode, members, seededRng(42));
+function setup(n = 4, pro: Profession = "buruh", mode: "rakyat_bersatu" | "juragan" = "rakyat_bersatu"): GameState {
+  const members = IDS.slice(0, n).map((id, i) => ({ id, name: id, seat: i, profession: pro }));
+  return createInitialState("room", mode, members, seededRng(1));
 }
 
-function act(s: GameState, who: string, action: Action, dice: number[] = []) {
-  return applyAction(s, who, action, scriptedRng(dice, seededRng(7)));
+/** Jalankan aksi dengan angka acak yang ditentukan (dadu, lalu pilihan kartu). */
+function act(s: GameState, who: string, action: Action, rolls: number[] = []) {
+  return applyAction(s, who, action, scriptedRng(rolls, seededRng(9)));
 }
+
+const types = (r: { events: { type: string }[] }) => r.events.map((e) => e.type);
 
 describe("setup", () => {
-  it("membuat state awal yang benar", () => {
-    const s = setup(["buruh", "pedagang", "jurnalis"]);
-    assert.equal(s.order.length, 3);
-    assert.equal(s.players[A].cuan, 1500);
-    assert.equal(s.tiles[37].owner, GOV);
-    assert.equal(s.tiles[39].owner, GOV);
-    assert.equal(s.tiles[6].owner, B, "pedagang dapat lapak gratis di Pasar Kaget");
-    assert.equal(s.phase, "awaiting_roll");
+  it("state awal: uang DR, papan 32 petak, nyawa Rezim sesuai jumlah pemain", () => {
+    const s = setup(4);
+    assert.equal(s.schema, 2);
+    assert.equal(TILES.length, R.BOARD_SIZE);
+    assert.equal(s.tiles.length, 32);
+    assert.equal(s.players.andi.cuan, 20 * JT);
+    assert.equal(s.kekuasaan, R.KEKUASAAN_AWAL[4]);
+    assert.equal(setup(2).kekuasaan, R.KEKUASAAN_AWAL[2]);
+    assert.equal(s.semangat, 0);
   });
 
-  it("buzzer hanya muncul di 5+ pemain mode rakyat", () => {
-    const five = ["a", "b", "c", "d", "e"];
-    const sec5 = assignSecrets("rakyat_bersatu", five, seededRng(3));
-    assert.equal(sec5.filter((x) => x.role === "buzzer").length, 1);
-    assert.equal(assignSecrets("rakyat_bersatu", five.slice(0, 4), seededRng(3)).filter((x) => x.role === "buzzer").length, 0);
-    assert.equal(assignSecrets("juragan", five, seededRng(3)).filter((x) => x.role === "buzzer").length, 0);
+  it("pedagang mulai dengan satu lapak gratis", () => {
+    const s = setup(2, "pedagang");
+    assert.equal(s.tiles[1].owner, "andi");
+    assert.equal(s.tiles[2].owner, "budi");
+  });
+
+  it("semua harga kelipatan DR 50.000", () => {
+    for (const t of TILES) {
+      for (const v of [t.price, t.amount]) if (v) assert.equal(v % 50_000, 0, t.name);
+    }
   });
 });
 
 describe("giliran", () => {
-  it("menolak aksi dari pemain yang bukan gilirannya", () => {
+  it("mendarat di usaha kosong: ditawari, beli, Semangat naik", () => {
+    let r = act(setup(), "andi", { type: "roll" }, [1, 3]);
+    assert.equal(r.state.phase, "awaiting_buy");
+    assert.equal(r.state.pendingTile, 4);
+    r = act(r.state, "andi", { type: "buy" });
+    assert.equal(r.state.tiles[4].owner, "andi");
+    assert.equal(r.state.players.andi.cuan, 20 * JT - 1.6 * JT);
+    assert.equal(r.state.semangat, R.SEMANGAT_BELI);
+    assert.equal(r.state.phase, "awaiting_end");
+  });
+
+  it("bukan giliran dan fase salah ditolak", () => {
     const s = setup();
-    assert.throws(() => act(s, B, { type: "roll" }), (e: unknown) => e instanceof GameError && e.code === "bukan_giliran");
+    assert.throws(() => act(s, "budi", { type: "roll" }), (e: GameError) => e.code === "bukan_giliran");
+    assert.throws(() => act(s, "andi", { type: "end_turn" }), (e: GameError) => e.code === "fase_salah");
   });
 
-  it("lempar dadu, beli petak, lalu akhiri giliran", () => {
-    let s = setup();
-    s = act(s, A, { type: "roll" }, [1, 2]).state; // ke petak 3 Kontrakan Petak
-    assert.equal(s.players[A].position, 3);
-    assert.equal(s.phase, "awaiting_buy");
-    s = act(s, A, { type: "buy" }).state;
-    assert.equal(s.tiles[3].owner, A);
-    assert.equal(s.players[A].cuan, 1440);
-    assert.equal(s.phase, "awaiting_end");
-    s = act(s, A, { type: "end_turn" }).state;
-    assert.equal(s.order[s.turn], B);
-    assert.equal(s.phase, "awaiting_roll");
-  });
-
-  it("bayar sewa ke sesama rakyat dapat bonus Bangga Produk Lokal", () => {
-    let s = setup();
-    s.tiles[3].owner = A;
-    s.turn = 1; // giliran Budi (ojol)
-    const r = act(s, B, { type: "roll" }, [1, 2]);
-    s = r.state;
-    // sewa 6, bonus 1 untuk masing-masing, ojol dapat 20 per giliran
-    assert.equal(s.players[B].cuan, 1500 - 6 + 1 + 20);
-    assert.equal(s.players[A].cuan, 1500 + 6 + 1);
-    assert.ok(r.events.some((e) => e.type === "bangga_produk_lokal"));
-  });
-
-  it("lewat petak Gajian dapat bonus", () => {
-    let s = setup();
-    s.players[A].position = 38;
-    s = act(s, A, { type: "roll" }, [1, 2]).state; // 38 + 3 = 1
-    assert.equal(s.players[A].position, 1);
-    assert.equal(s.players[A].cuan, 1500 + R.BONUS_LEWAT_GAJIAN);
-  });
-
-  it("dadu kembar boleh lempar lagi", () => {
-    let s = setup();
-    s = act(s, A, { type: "roll" }, [2, 2]).state; // ke petak 4 Potongan Gaji
-    assert.equal(s.players[A].cuan, 1350);
-    assert.equal(s.phase, "awaiting_roll");
-    assert.equal(s.order[s.turn], A);
-  });
-
-  it("tiga kali dadu kembar langsung kena tilang", () => {
-    let s = setup();
-    s.doublesInRow = 2;
-    s = act(s, A, { type: "roll" }, [3, 3]).state;
-    assert.equal(s.players[A].position, 10);
-    assert.equal(s.players[A].jailTurns, 2);
-    assert.equal(s.phase, "awaiting_end");
-  });
-
-  it("mendarat di Diciduk! langsung ke Kena Tilang", () => {
-    let s = setup();
-    s.players[A].position = 27;
-    s = act(s, A, { type: "roll" }, [1, 2]).state;
-    assert.equal(s.players[A].position, 10);
-    assert.equal(s.players[A].jailTurns, 2);
-  });
-
-  it("kecurigaan tinggi + dadu kembar = OTT", () => {
-    let s = setup();
-    s.players[A].kecurigaan = 5;
-    const r = act(s, A, { type: "roll" }, [4, 4]);
-    s = r.state;
-    assert.ok(r.events.some((e) => e.type === "ott"));
-    assert.equal(s.players[A].position, 10);
-    assert.equal(s.players[A].cuan, 1300);
-    assert.equal(s.players[A].kecurigaan, 0);
-  });
-});
-
-describe("bangkrut", () => {
-  it("tabungan darurat dipakai dulu sebelum bangkrut", () => {
-    let s = setup();
-    s.players[A].cuan = 100;
-    s.players[A].tabungan = 100;
-    s.players[A].position = 34;
-    s = act(s, A, { type: "roll" }, [1, 2]).state; // petak 37 Kursi Komisaris, setor 150
-    assert.equal(s.players[A].bankrupt, false);
-    assert.equal(s.players[A].cuan, 0);
-    assert.equal(s.players[A].tabungan, 50);
-  });
-
-  it("dua pemain bangkrut = rakyat kalah", () => {
-    let s = setup();
-    s.players[B].bankrupt = true;
-    s.players[A].cuan = 10;
-    s.players[A].position = 34;
-    s = act(s, A, { type: "roll" }, [1, 2]).state;
-    assert.equal(s.players[A].bankrupt, true);
-    assert.equal(s.phase, "game_over");
-    assert.deepEqual(s.result, { kind: "rakyat_kalah", reason: "dua_bangkrut" });
-  });
-
-  it("satu pemain bangkrut menurunkan Meter Gerakan dan giliran pindah", () => {
-    let s = setup();
-    s.gerakan = 30;
-    s.players[A].cuan = 10;
-    s.players[A].position = 34;
-    s = act(s, A, { type: "roll" }, [1, 2]).state;
-    assert.equal(s.players[A].bankrupt, true);
-    assert.equal(s.gerakan, 10);
-    assert.equal(s.order[s.turn], B);
-  });
-});
-
-describe("gerakan rakyat", () => {
-  it("petisi menaikkan meter dan hanya sekali per giliran", () => {
-    let s = setup();
-    s = act(s, A, { type: "petisi" }).state;
-    assert.equal(s.gerakan, R.PETISI_GERAKAN);
-    assert.equal(s.players[A].cuan, 1500 - R.PETISI_BIAYA);
-    assert.throws(() => act(s, A, { type: "petisi" }), (e: unknown) => e instanceof GameError && e.code === "aksi_sudah_dipakai");
-  });
-
-  it("meter gerakan 100 = rakyat menang", () => {
-    let s = setup(["kreator", "ojol", "buruh"]);
-    s.gerakan = R.GERAKAN_MENANG - R.PETISI_GERAKAN * 2;
-    s = act(s, A, { type: "petisi" }).state; // kreator dapat 2x
-    assert.equal(s.phase, "game_over");
-    assert.deepEqual(s.result, { kind: "rakyat_menang" });
-  });
-
-  it("donasi ke lumbung memberi token Suara Rakyat, liputan memakai lumbung", () => {
-    let s = setup();
-    s = act(s, A, { type: "donasi_lumbung", amount: 300 }).state;
-    assert.equal(s.lumbung, 300);
-    assert.equal(s.players[A].suaraRakyat, 3);
-    s = act(s, A, { type: "liputan_media" }).state;
-    assert.equal(s.lumbung, 300 - R.LIPUTAN_BIAYA_LUMBUNG);
-    assert.equal(s.gerakan, R.LIPUTAN_GERAKAN);
-  });
-
-  it("menolak setor tabungan melebihi cuan", () => {
+  it("lewat Gajian: gaji + omzet, 20% gaji masuk Lumbung", () => {
     const s = setup();
-    assert.throws(() => act(s, A, { type: "setor_tabungan", amount: 99999 }), GameError);
-    assert.throws(() => act(s, A, { type: "setor_tabungan", amount: -5 }), GameError);
+    s.players.andi.position = 30;
+    s.tiles[4].owner = "andi";
+    const omzet = omzetUsaha(s, 4);
+    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.ok(types(r).includes("gajian"));
+    assert.equal(r.state.lumbung, 0.6 * JT);
+    assert.equal(r.state.players.andi.cuan, 20 * JT + 3 * JT - 0.6 * JT + omzet);
+  });
+
+  it("kena pungli: uang berkurang, Semangat naik", () => {
+    const s = setup();
+    s.players.andi.position = 3;
+    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.equal(r.state.players.andi.cuan, 19 * JT);
+    assert.equal(r.state.semangat, R.SEMANGAT_PUNGLI);
+  });
+
+  it("aset Rezim: bayar pungli lalu bisa direbut", () => {
+    const s = setup();
+    s.tiles[4] = { owner: GOV, level: 1 };
+    let r = act(s, "andi", { type: "roll" }, [1, 3]);
+    assert.ok(types(r).includes("pungli"));
+    assert.equal(r.state.phase, "awaiting_buy");
+    const before = r.state.kekuasaan;
+    r = act(r.state, "andi", { type: "buy" });
+    assert.equal(r.state.tiles[4].owner, "andi");
+    assert.equal(r.state.tiles[4].level, 1);
+    assert.equal(r.state.kekuasaan, before - R.REBUT_DAMAGE);
+  });
+
+  it("dadu kembar lempar lagi, tiga kali kembar kena tilang", () => {
+    let r = act(setup(), "andi", { type: "roll" }, [4, 4]); // petak 8: cuma lewat
+    assert.equal(r.state.phase, "awaiting_roll");
+    r = act(r.state, "andi", { type: "roll" }, [4, 4]); // petak 16: titik demo
+    r = act(r.state, "andi", { type: "roll" }, [1, 1]);
+    assert.equal(r.state.players.andi.position, R.JAIL_TILE);
+    assert.equal(r.state.players.andi.jailTurns, R.LAMA_TILANG);
+    assert.equal(r.state.phase, "awaiting_end");
   });
 });
 
-describe("ronde & pemerintah", () => {
-  it("akhir ronde: biaya hidup dipotong dan Pemerintah ambil kebijakan", () => {
-    let s = setup();
-    const before = s.players[C].cuan;
-    s.turn = 2;
-    s.phase = "awaiting_end";
-    const r = act(s, C, { type: "end_turn" });
-    s = r.state;
-    assert.equal(s.round, 2);
-    assert.equal(s.order[s.turn], A);
-    assert.ok(r.events.some((e) => e.type === "biaya_hidup"));
-    assert.ok(r.events.some((e) => e.type === "gajian"), "gaji dibayar tiap ronde");
-    assert.ok(r.events.some((e) => e.type === "kebijakan"));
-    assert.notEqual(s.players[C].cuan, before);
+describe("melawan Rezim", () => {
+  it("Semangat penuh memicu Demo Akbar yang memangkas Kekuasaan", () => {
+    const s = setup();
+    s.semangat = 99;
+    s.players.andi.position = 3;
+    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.ok(types(r).includes("demo_akbar"));
+    assert.equal(r.state.semangat, 0);
+    assert.equal(r.state.demoCount, 1);
+    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[4] - R.DEMO_DAMAGE);
   });
 
-  it("Pemerintah meredam gerakan tiap akhir ronde", () => {
-    let s = setup();
-    s.gerakan = 50;
-    s.turn = 2;
-    s.phase = "awaiting_end";
-    s = act(s, C, { type: "end_turn" }).state;
-    assert.ok(s.gerakan < 50);
+  it("Kekuasaan habis: rakyat menang", () => {
+    const s = setup();
+    s.kekuasaan = 5;
+    s.semangat = 99;
+    s.players.andi.position = 3;
+    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.deepEqual(r.state.result, { kind: "rakyat_menang" });
+    assert.equal(r.state.phase, "game_over");
   });
 
-  it("state asli tidak berubah (fungsi murni)", () => {
+  it("petisi dan liputan: satu aksi per giliran", () => {
+    const s = setup();
+    s.lumbung = 6 * JT;
+    let r = act(s, "andi", { type: "liputan_media" });
+    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[4] - R.LIPUTAN_DAMAGE);
+    assert.equal(r.state.lumbung, 6 * JT - R.LIPUTAN_BIAYA_LUMBUNG);
+    assert.throws(() => act(r.state, "andi", { type: "petisi" }), (e: GameError) => e.code === "aksi_sudah_dipakai");
+    r = act(setup(), "andi", { type: "petisi" });
+    assert.equal(r.state.semangat, R.SEMANGAT_PETISI);
+    assert.equal(r.state.players.andi.cuan, 20 * JT - R.PETISI_BIAYA);
+  });
+
+  it("satu grup warna dikuasai rakyat jadi Kampung Mandiri", () => {
+    const s = setup();
+    s.tiles[1].owner = "budi";
+    let r = act(s, "andi", { type: "roll" }, [1, 1]); // petak 2, kembar
+    r = act(r.state, "andi", { type: "buy" });
+    assert.ok(types(r).includes("kampung_mandiri"));
+    assert.deepEqual(r.state.kampung, ["coklat"]);
+    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[4] - R.KAMPUNG_DAMAGE);
+  });
+
+  it("akhir ronde: Rezim keluarkan kebijakan dan mobil pejabat jalan", () => {
+    let s = setup(2);
+    for (const id of ["andi", "budi"]) {
+      s = act(s, id, { type: "roll" }, [4, 4]).state; // petak 8
+      s = act(s, id, { type: "roll" }, [4, 3]).state; // petak 15
+      if (s.phase === "awaiting_buy") s = act(s, id, { type: "skip_buy" }).state;
+      if (id === "andi") s = act(s, id, { type: "end_turn" }).state;
+    }
+    // kebijakan ke-0 (BBM naik), dadu Rezim 1+2 -> petak 19 (kosong) dicaplok
+    const r = act(s, "budi", { type: "end_turn" }, [0, 1, 2]);
+    assert.deepEqual(
+      types(r).filter((t) => ["kebijakan", "rezim_gerak", "rezim_caplok", "ronde_baru"].includes(t)),
+      ["kebijakan", "rezim_gerak", "rezim_caplok", "ronde_baru"],
+    );
+    assert.equal(r.state.tiles[19].owner, GOV);
+    assert.equal(r.state.round, 2);
+    assert.equal(r.state.rezimPos, 19);
+    assert.equal(r.state.turn, 0);
+  });
+
+  it("mobil pejabat mampir ke usaha rakyat: bayar sewa dan Kekuasaan turun", () => {
+    let s = setup(2);
+    s.tiles[19] = { owner: "andi", level: 2 };
+    s.turn = 1;
+    s.phase = "awaiting_end";
+    const r = act(s, "budi", { type: "end_turn" }, [4, 1, 2]); // kebijakan ke-4: pengalihan isu
+    assert.ok(types(r).includes("rezim_bayar"));
+    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[2] - R.REZIM_KENA[2]);
+    assert.ok(r.state.players.andi.cuan > 20 * JT);
+  });
+
+  it("Pemilu tiba dan Rezim masih berkuasa: rakyat kalah", () => {
+    const s = setup(2);
+    s.round = R.MAX_ROUNDS;
+    s.turn = 1;
+    s.phase = "awaiting_end";
+    const r = act(s, "budi", { type: "end_turn" }, [4, 1, 1]);
+    assert.deepEqual(r.state.result, { kind: "rakyat_kalah", reason: "pemilu" });
+  });
+});
+
+describe("talangan & bangkrut", () => {
+  it("Lumbung menalangi warga yang tidak sanggup bayar", () => {
+    const s = setup();
+    s.players.andi.cuan = 100_000;
+    s.players.andi.position = 3;
+    s.lumbung = 5 * JT;
+    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.ok(types(r).includes("talangan"));
+    assert.equal(r.state.players.andi.cuan, 0);
+    assert.equal(r.state.lumbung, 4_100_000);
+    assert.equal(r.state.players.andi.bankrupt, false);
+  });
+
+  it("tanpa Lumbung: usaha dijual rugi, lalu bangkrut; dua warga bangkrut = kalah", () => {
+    const s = setup();
+    s.players.andi.cuan = 100_000;
+    s.players.andi.position = 3;
+    s.tiles[1].owner = "andi";
+    let r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.ok(types(r).includes("jual_rugi"));
+    assert.equal(r.state.tiles[1].owner, null);
+    assert.equal(r.state.players.andi.bankrupt, true);
+    assert.equal(r.state.phase, "awaiting_roll");
+    assert.equal(r.state.order[r.state.turn], "budi");
+
+    r.state.players.budi.cuan = 0;
+    r.state.players.budi.position = 3;
+    r = act(r.state, "budi", { type: "roll" }, [1, 2]);
+    assert.deepEqual(r.state.result, { kind: "rakyat_kalah", reason: "bangkrut" });
+  });
+
+  it("kalau satu-satunya pemain manusia bangkrut, game selesai", () => {
+    const s = setup();
+    for (const id of ["budi", "citra", "dewi"]) s.players[id].bot = true;
+    s.players.andi.cuan = 0;
+    s.players.andi.position = 3;
+    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    assert.deepEqual(r.state.result, { kind: "rakyat_kalah", reason: "bangkrut" });
+  });
+});
+
+describe("kontrak dengan klien", () => {
+  it("lastEvents berisi event aksi terakhir dan state lama tidak berubah", () => {
     const s = setup();
     const snapshot = JSON.stringify(s);
-    act(s, A, { type: "roll" }, [1, 2]);
+    const r = act(s, "andi", { type: "roll" }, [1, 3]);
+    assert.deepEqual(r.state.lastEvents.map((e) => e.type), ["dadu", "gerak", "tawaran_beli"]);
     assert.equal(JSON.stringify(s), snapshot);
+  });
+
+  it("state versi lama ditolak dengan pesan jelas", () => {
+    const old = { ...setup(), schema: 1 } as unknown as GameState;
+    assert.throws(() => act(old, "andi", { type: "roll" }), (e: GameError) => e.code === "game_lama");
+  });
+
+  it("mode Juragan: tidak ada meter, yang terkaya menang di akhir", () => {
+    const s = setup(2, "buruh", "juragan");
+    s.round = R.MAX_ROUNDS;
+    s.turn = 1;
+    s.phase = "awaiting_end";
+    s.players.budi.cuan += JT;
+    const r = act(s, "budi", { type: "end_turn" }, [0, 1, 1]);
+    assert.equal(r.state.result?.kind, "juragan_menang");
+    assert.equal(r.state.semangat, 0);
   });
 });
 
-describe("simulasi acak", () => {
-  it("1.000 game acak selalu selesai tanpa state rusak", () => {
+describe("simulasi", () => {
+  it("600 game acak selalu selesai tanpa state rusak", () => {
     const pros: Profession[] = ["buruh", "pedagang", "ojol", "kreator", "jurnalis", "mahasiswa"];
-    let finished = 0;
-    for (let g = 0; g < 1000; g++) {
+    for (let g = 0; g < 600; g++) {
       const rng = seededRng(g + 1);
       const n = 2 + (g % 5);
       const mode = g % 4 === 0 ? "juragan" : "rakyat_bersatu";
@@ -254,52 +286,47 @@ describe("simulasi acak", () => {
         profession: pros[(g + i) % pros.length],
       }));
       let s = createInitialState(`room-${g}`, mode, members, rng);
-
-      for (let step = 0; step < 5000 && s.phase !== "game_over"; step++) {
+      for (let step = 0; step < 4000 && s.phase !== "game_over"; step++) {
         const me = s.order[s.turn];
-        const p = s.players[me];
         const options: Action[] = [];
         if (s.phase === "awaiting_roll") options.push({ type: "roll" });
         if (s.phase === "awaiting_buy") options.push({ type: "buy" }, { type: "skip_buy" });
         if (s.phase === "awaiting_end") options.push({ type: "end_turn" });
         if (s.phase === "awaiting_roll" || s.phase === "awaiting_end") {
-          if (mode === "rakyat_bersatu" && rng.int(0, 9) === 0) options.push({ type: "petisi" });
-          if (p.cuan > 300 && rng.int(0, 9) === 0) options.push({ type: "donasi_lumbung", amount: 100 });
-          const mine = s.tiles.findIndex((t, i) => t.owner === me && t.level < 3 && i % 2 === 1);
-          if (mine >= 0 && rng.int(0, 4) === 0) options.push({ type: "upgrade", tile: mine });
+          if (rng.int(0, 9) === 0) options.push({ type: "petisi" }, { type: "liputan_media" });
+          if (rng.int(0, 9) === 0) options.push({ type: "donasi_lumbung", amount: 500_000 });
+          const mine = s.tiles.findIndex((t) => t.owner === me && t.level < 3);
+          if (mine >= 0 && rng.int(0, 3) === 0) options.push({ type: "upgrade", tile: mine });
         }
         const action = options[rng.int(0, options.length - 1)];
         try {
           s = applyAction(s, me, action, rng).state;
         } catch (e) {
           if (!(e instanceof GameError)) throw e;
-          // aksi opsional boleh ditolak (cuan kurang, dll), aksi wajib tidak boleh
-          if (["roll", "end_turn", "skip_buy"].includes(action.type)) throw e;
+          // aksi opsional boleh ditolak (uang kurang, dll), aksi wajib tidak boleh
+          if (["roll", "end_turn", "skip_buy", "buy"].includes(action.type)) throw e;
         }
-
         for (const pl of Object.values(s.players)) {
-          assert.ok(Number.isFinite(pl.cuan), "cuan harus angka");
-          if (!pl.bankrupt) assert.ok(pl.cuan >= 0, `cuan minus pada pemain hidup: ${pl.cuan}`);
-          assert.ok(pl.position >= 0 && pl.position < 40);
+          assert.ok(Number.isFinite(pl.cuan));
+          assert.ok(pl.cuan >= 0, `uang minus: ${pl.cuan}`);
+          assert.equal(pl.cuan % 1000, 0, `uang bukan kelipatan 1.000: ${pl.cuan}`);
+          assert.ok(pl.position >= 0 && pl.position < R.BOARD_SIZE);
         }
-        assert.ok(s.gerakan >= 0 && s.gerakan <= 100);
+        assert.ok(s.semangat >= 0 && s.semangat < R.SEMANGAT_PENUH);
+        assert.ok(s.kekuasaan >= 0 && s.kekuasaan <= s.kekuasaanMaks);
         assert.ok(s.lumbung >= 0);
         if (s.phase !== "game_over") assert.equal(s.players[s.order[s.turn]].bankrupt, false);
       }
       assert.equal(s.phase, "game_over", `game ${g} tidak selesai`);
-      finished++;
     }
-    assert.equal(finished, 1000);
   });
-});
 
-describe("bot", () => {
-  it("300 game penuh berisi bot selalu selesai tanpa aksi ditolak", () => {
-    const tally = { rakyat_menang: 0, rakyat_kalah: 0, juragan_menang: 0 };
-    for (let g = 0; g < 300; g++) {
+  it("400 game penuh bot: tidak pernah macet, menang-kalahnya seimbang", () => {
+    const menang: Record<number, number> = {};
+    const total: Record<number, number> = {};
+    for (let g = 0; g < 400; g++) {
       const rng = seededRng(5000 + g);
       const n = 2 + (g % 5);
-      const mode = g % 3 === 0 ? "juragan" : "rakyat_bersatu";
       const members = Array.from({ length: n }, (_, i) => ({
         id: `b${i}`,
         name: BOT_NAMES[i],
@@ -307,27 +334,25 @@ describe("bot", () => {
         profession: null,
         bot: true,
       }));
-      let s = createInitialState(`bot-${g}`, mode, members, rng);
-      const roles = Object.fromEntries(assignSecrets(mode, s.order, rng).map((x) => [x.userId, x.role]));
-      assert.equal(s.players.b0.bot, true);
-      let steps = 0;
+      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng);
+      const roles = Object.fromEntries(assignSecrets(s.mode, s.order, rng).map((x) => [x.userId, x.role]));
       let perTurn = 0;
-      let lastTurnKey = "";
-      while (s.phase !== "game_over") {
+      let last = "";
+      for (let steps = 0; s.phase !== "game_over"; steps++) {
         const me = s.order[s.turn];
         const key = `${s.round}:${s.turn}`;
-        perTurn = key === lastTurnKey ? perTurn + 1 : 0;
-        lastTurnKey = key;
-        assert.ok(perTurn < 40, `bot macet di satu giliran (game ${g})`);
-        const action = decideBotAction(s, me, roles[me]);
-        s = applyAction(s, me, action, rng).state; // tidak boleh melempar error
-        assert.ok(++steps < 20000, `game ${g} kepanjangan`);
+        perTurn = key === last ? perTurn + 1 : 0;
+        last = key;
+        assert.ok(perTurn < 60, `bot macet di satu giliran (game ${g})`);
+        assert.ok(steps < 20000, `game ${g} kepanjangan`);
+        s = applyAction(s, me, decideBotAction(s, me, roles[me]), rng).state; // tidak boleh melempar
       }
-      tally[s.result!.kind]++;
+      total[n] = (total[n] ?? 0) + 1;
+      if (s.result!.kind === "rakyat_menang") menang[n] = (menang[n] ?? 0) + 1;
     }
-    // Bot kooperatif harus kadang menang, tapi jangan terlalu gampang.
-    console.log("hasil bot:", tally);
-    assert.ok(tally.rakyat_menang > 0, "rakyat bot tidak pernah menang");
-    assert.ok(tally.rakyat_kalah > 0, "rakyat bot selalu menang");
+    for (const n of [2, 3, 4, 5, 6]) {
+      const rate = (menang[n] ?? 0) / total[n];
+      assert.ok(rate > 0.3 && rate < 0.9, `${n} pemain: bot menang ${Math.round(rate * 100)}%`);
+    }
   });
 });

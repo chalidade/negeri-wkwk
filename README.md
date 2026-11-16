@@ -1,160 +1,45 @@
 # Negeri Wkwk
 
-Game papan online satire ala monopoli: **rakyat bersatu melawan Pemerintah**. Pemain cari nafkah lewat kerja dan usaha, saling jaga, dan mendorong Reformasi lewat gerakan damai, sambil waspada sama Buzzer yang disusupkan.
+Monopoli satire online: rakyat satu tim menumbangkan Rezim. Game fiksi, tidak mewakili lembaga, partai, atau tokoh nyata.
 
-Repo ini berisi **backend** (Supabase: skema database, aturan keamanan, engine permainan, Edge Functions) dan **aplikasi Flutter** di folder `app/`. Panduan rilis ke Play Store dan App Store ada di [RELEASE.md](RELEASE.md).
+Main di browser: https://negeri-wkwk.vercel.app
 
-## Arsitektur
+## Cara main singkat
 
-```mermaid
-flowchart LR
-  App[Aplikasi Flutter] -- baca + realtime --> DB[(Postgres Supabase)]
-  App -- aksi: roll, buy, end_turn --> EF[Edge Functions]
-  EF -- engine murni --> ENG[_shared/engine]
-  EF -- service role --> DB
-```
+- **Tujuan:** habiskan ❤️ Kekuasaan Rezim sebelum Pemilu (ronde 20). Kalah kalau Pemilu tiba, atau 2 warga bangkrut.
+- **Cari duit:** lempar dadu, beli usaha. Tiap lewat Gajian dapat gaji + omzet usaha. Uangnya DR (Duit Rakyat), skala rupiah.
+- **✊ Semangat Demo:** terisi saat warga beli/upgrade usaha, bikin petisi, atau kena pungli. Penuh = Demo Akbar, Kekuasaan Rezim rontok.
+- **Rezim:** tiap akhir ronde keluar satu Kebijakan (atau bencana), lalu mobil pejabat jalan. Petak kosong dicaplok; kalau mampir ke usaha rakyat, dia yang bayar dan Kekuasaannya turun.
+- **🌾 Lumbung Bersama:** dana talangan. Otomatis menalangi warga yang tidak sanggup bayar, dan bisa mendanai Liputan Media.
+- **Kampung Mandiri:** satu warna dikuasai rakyat (boleh beda orang) = omzet dan sewa 2x, Kekuasaan turun.
+- **Profesi:** Buruh, Pedagang, Ojol, Kreator, Jurnalis, Mahasiswa. Masing-masing punya satu keahlian.
 
-- **Klien hanya membaca.** Semua perubahan lewat Edge Function, jadi dadu dan uang nggak bisa dicurangi dari HP.
-- **State publik** disimpan utuh di `game_states.state` (jsonb) dengan `version` untuk optimistic locking.
-- **Peran rahasia** (Buzzer, Mimpi Pribadi) ada di `player_secrets`. RLS memastikan hanya pemiliknya yang bisa membaca.
-- **Event rahasia** di `game_events` diberi `visible_to` supaya cuma orang tertentu yang lihat.
+Mode kedua, **Juragan**, bersaing jadi yang paling tajir; Rezim tetap mengganggu.
 
-## Alur giliran
+## Isi repo
 
-```mermaid
-flowchart TD
-  R[awaiting_roll] -->|roll| SK{Kartu 'Kapan Nikah'?}
-  SK -->|ya| E[awaiting_end]
-  SK -->|tidak| J{Lagi ditilang?}
-  J -->|dadu biasa| E
-  J -->|dadu kembar| M[Gerak]
-  J -->|tidak| D{Dadu kembar?}
-  D -->|kecurigaan >= 5| OTT[OTT: denda + tilang] --> E
-  D -->|ke-3 kali| TL[Kena Tilang] --> E
-  D -->|tidak / ke-1, ke-2| M
-  M -->|lewat Gajian| G[Bonus THR] --> T
-  M --> T{Jenis petak}
-  T -->|usaha belum dimiliki| B[awaiting_buy]
-  B -->|buy / skip_buy| F{Dadu kembar tadi?}
-  T -->|sewa, pajak, kartu, bencana| F
-  F -->|ya| R
-  F -->|tidak| E
-  E -->|end_turn| N[Pemain berikutnya]
-  N -->|ronde habis| GOV[Gaji, biaya hidup, giliran Pemerintah]
-  GOV --> R
-```
+| Folder | Isi |
+| --- | --- |
+| `supabase/functions/_shared/engine/` | Aturan permainan (TypeScript murni). Satu sumber untuk server dan klien. |
+| `supabase/functions/_shared/board.json` | Papan 32 petak. |
+| `supabase/functions/*/` | Edge Functions: `create-room`, `join-room`, `add-bot`, `remove-bot`, `start-game`, `game-action`, `bot-step`, `delete-account`. |
+| `supabase/migrations/` | Skema Postgres + RLS. Klien hanya membaca; semua penulisan lewat Edge Functions. |
+| `supabase/tests/` | Tes engine (termasuk simulasi ratusan game) dan tes RLS. |
+| `web3d/` | Klien 3D (Three.js + Vite). Solo jalan di perangkat tanpa server; main bareng teman lewat Supabase. |
 
-Di fase `awaiting_roll` dan `awaiting_end`, pemain juga boleh: `upgrade`, `setor_tabungan`, `donasi_lumbung`, `petisi`, `liputan_media` (maksimal satu aksi gerakan per giliran), dan `bayar_denda` saat ditilang.
-
-**Akhir ronde:** semua pemain terima gaji sesuai profesi, biaya hidup dipotong, Pemerintah mengambil kartu Kebijakan (dua kartu setelah pemilu, bagi-bagi bansos saat Musim Kampanye), dan Meteran Inflasi naik tiap 3 ronde. Pemerintah juga meredam Meter Gerakan tiap ronde, dan makin besar gerakannya makin keras redamannya. Kalau Kesabaran Rakyat habis, terjadi Demo Akbar dan Meter Gerakan naik.
-
-**Menang/kalah (mode Rakyat Bersatu):** menang kalau Meter Gerakan mencapai 100. Kalah kalau 2 pemain bangkrut atau lewat ronde ke-30.
-
-## Struktur folder
-
-```
-supabase/
-  migrations/20261116000000_init.sql   skema + RLS
-  functions/
-    _shared/board.json                 40 petak papan (dipakai juga oleh Flutter)
-    _shared/engine/                    engine permainan (TypeScript murni)
-      types.ts  rules.ts  core.ts  cards.ts  engine.ts  rng.ts  mod.ts
-    _shared/http.ts                    auth, CORS, error JSON
-    create-room/  join-room/  start-game/  game-action/  delete-account/
-  tests/
-    engine.test.ts                     unit test + simulasi 1.000 game acak
-    rls_test.sql                       uji aturan keamanan
-    supabase_stub.sql                  stub auth Supabase untuk uji lokal
-    run_db_tests.sh
-    sync.test.ts                       cek board.json & angka aturan sama di app
-app/
-  lib/main.dart                        inisialisasi Supabase + gerbang login
-  lib/screens/                         login, beranda, lobby, permainan
-  lib/widgets/board_view.dart          papan 40 petak + pion
-  lib/models/                          model state, papan, teks event
-  lib/services/api.dart                panggil Edge Functions + realtime
-  assets/board.json                    salinan papan (scripts/sync_board.sh)
-```
-
-Angka keseimbangan (gaji, sewa, inflasi, denda) ada di `rules.ts`. Ubah di sana saat playtest.
-
-### Hasil simulasi awal
-
-Simulasi 1.500 game, 4 bot, dengan angka di `rules.ts` saat ini:
-
-| Strategi bot | Rakyat menang | Kalah (2 bangkrut) | Kalah (waktu habis) | Rata-rata ronde |
-| --- | --- | --- | --- | --- |
-| Pasif (cuma beli & jalan) | 0% | 62% | 38% | 25,0 |
-| Seimbang (aksi kalau Cuan > 600) | 1% | 77% | 22% | 23,3 |
-| Agresif (aksi tiap giliran) | 10% | 88% | 2% | 15,7 |
-
-Sesuai konsep, menang memang susah. Bot ini belum bisa saling menalangi; fitur Patungan, Lumbung untuk talangan, dan Ronda nanti harus menaikkan peluang menang tim yang kompak.
+Angka keseimbangan ada di `engine/rules.ts`, isi kartu di `engine/cards.ts`.
 
 ## Menjalankan
 
-Tes engine (Node 22.18+):
-
 ```bash
-npm test
+npm test                      # tes engine
+cd web3d && npm ci && npm run dev   # klien di http://localhost:5173
 ```
 
-Tes database + RLS (butuh Docker atau PostgreSQL lokal):
+Tes database butuh PostgreSQL 15+ atau Docker: `npm run test:db`.
 
-```bash
-npm run test:db
-```
+## Deploy
 
-## Deploy ke Supabase
-
-1. Buat project di [supabase.com](https://supabase.com), lalu install [Supabase CLI](https://supabase.com/docs/guides/cli).
-2. Di folder repo:
-   ```bash
-   supabase init          # membuat supabase/config.toml, folder lain tidak diubah
-   supabase login
-   supabase link --project-ref <project-ref>
-   supabase db push       # menjalankan migration
-   supabase functions deploy create-room join-room start-game game-action delete-account
-   ```
-3. Di dashboard: Authentication > Sign In / Providers, aktifkan **Allow anonymous sign-ins** (pemain masuk cukup pakai nama).
-
-`SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` otomatis tersedia di Edge Functions. **Jangan pernah** taruh service role key di aplikasi Flutter.
-
-## API Edge Functions
-
-Semua `POST` dengan header `Authorization: Bearer <access token user>`.
-
-| Function | Body | Hasil |
-| --- | --- | --- |
-| `create-room` | `{ mode?, maxPlayers?, profession? }` | `{ roomId, code }` |
-| `join-room` | `{ code, profession? }` | `{ roomId, seat }` |
-| `start-game` | `{ roomId }` (host saja) | `{ version, state }` |
-| `game-action` | `{ roomId, version, action }` | `{ version, state, events }` |
-| `delete-account` | `{}` | `{ ok: true }` |
-
-Contoh `action`: `{ "type": "roll" }`, `{ "type": "buy" }`, `{ "type": "upgrade", "tile": 6 }`, `{ "type": "donasi_lumbung", "amount": 100 }`.
-
-Error dikembalikan sebagai `{ error: "<kode>", message: "<pesan Bahasa Indonesia>" }`. Kode `state_basi` (409) artinya klien harus memuat ulang state.
-
-Di Flutter, berlangganan perubahan dengan Supabase Realtime pada tabel `game_states` (filter `room_id`) dan `game_events`.
-
-## Menjalankan aplikasi
-
-1. Install [Flutter](https://docs.flutter.dev/get-started/install) (stable).
-2. Salin `app/env.example.json` jadi `app/env.json`, isi dengan Project URL dan anon/publishable key dari Supabase > Project Settings > API.
-3. Buat folder platform sekali saja (lihat RELEASE.md bagian 0):
-   ```bash
-   cd app
-   flutter create . --org com.negeriwkwk --project-name negeri_wkwk --platforms=android,ios
-   flutter pub get
-   flutter run --dart-define-from-file=env.json
-   ```
-4. Coba main bareng: jalankan di dua HP/emulator, bikin room di satu, gabung pakai kode di yang lain.
-
-## Belum dibuat (berikutnya)
-
-- Animasi dadu dan pion, suara, kartu ringkasan yang bisa di-share ke story.
-- Kemampuan Buzzer (sebar hoaks, sunat donasi), Cek Fakta, dan Sidang Rakyat.
-- Aksi gerakan lanjutan: Gugatan ke Mahkamah, Mogok Nasional, Pemilu Rakyat.
-- Lumbung untuk menalangi teman, Patungan, Ronda, dan kartu Ordal.
-- Timer giliran dan bot untuk pemain yang disconnect.
-- Toko Emas Antum (Google Play Billing) dan validasi pembelian di server.
+- Push ke `main`: GitHub Actions menjalankan tes, lalu membangun `web3d` ke branch `web-preview` yang di-deploy Vercel.
+- Integrasi GitHub Supabase men-deploy migration dan Edge Functions yang terdaftar di `supabase/config.toml`.
+- Rilis ke Play Store dan App Store: lihat `RELEASE.md`.

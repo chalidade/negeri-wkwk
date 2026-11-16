@@ -48,13 +48,6 @@ export interface MemberRow {
   is_bot: boolean;
 }
 
-export interface EventRow {
-  id: number;
-  version: number;
-  type: string;
-  actor_id: string | null;
-  payload: Record<string, unknown>;
-}
 
 export interface SecretRow {
   role: "rakyat" | "buzzer";
@@ -124,22 +117,11 @@ export async function getSecret(roomId: string): Promise<SecretRow | null> {
   return (data as SecretRow | null) ?? null;
 }
 
-export async function getEvents(roomId: string, limit = 30): Promise<EventRow[]> {
-  const { data } = await supabase
-    .from("game_events")
-    .select("id, version, type, actor_id, payload")
-    .eq("room_id", roomId)
-    .order("id", { ascending: false })
-    .limit(limit);
-  return ((data ?? []) as EventRow[]).reverse();
-}
-
 /** Berlangganan perubahan room. Mengembalikan fungsi untuk berhenti. */
 export function subscribeRoom(
   roomId: string,
   handlers: {
     onGame?: (row: GameRow) => void;
-    onEvent?: (row: EventRow) => void;
     onMembers?: () => void;
   },
 ): () => void {
@@ -152,11 +134,6 @@ export function subscribeRoom(
         const row = p.new as GameRow | undefined;
         if (row && row.state) handlers.onGame?.({ version: row.version, state: row.state });
       },
-    )
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "game_events", filter: `room_id=eq.${roomId}` },
-      (p) => handlers.onEvent?.(p.new as EventRow),
     )
     .on(
       "postgres_changes",

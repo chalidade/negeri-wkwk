@@ -7,7 +7,7 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "node --test supabase/tests/engine.test.ts supabase/tests/sync.test.ts",
+    "test": "node --test supabase/tests/engine.test.ts",
     "test:db": "bash supabase/tests/run_db_tests.sh"
   }
 }

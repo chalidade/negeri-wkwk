@@ -1,55 +1,88 @@
-// Tipe dan data papan dipakai bersama dengan server (satu sumber kebenaran).
-import boardJson from "../../supabase/functions/_shared/board.json";
-import type {
-  Action,
-  GameState,
-  PlayerState,
-  TileDef,
-  TileState,
-} from "../../supabase/functions/_shared/engine/types.ts";
-import * as rules from "../../supabase/functions/_shared/engine/rules.ts";
-
-export type { Action, GameState, PlayerState, TileDef, TileState };
-export { rules };
-
-export const TILES: TileDef[] = (boardJson as { tiles: TileDef[] }).tiles;
-export const GOV = "pemerintah";
+// Aturan, tipe, dan data papan dipakai bersama dengan server (satu sumber kebenaran).
+export * from "../../supabase/functions/_shared/engine/mod.ts";
+import type { GameState, PlayerState } from "../../supabase/functions/_shared/engine/mod.ts";
 
 export const PROFESSION_LABEL: Record<string, string> = {
   buruh: "Buruh Pabrik",
-  pedagang: "Pedagang UMKM",
-  ojol: "Ojol / Kurir",
+  pedagang: "Pedagang",
+  ojol: "Ojol",
   kreator: "Kreator Konten",
   jurnalis: "Jurnalis",
   mahasiswa: "Mahasiswa",
 };
 
 export const PROFESSION_EMOJI: Record<string, string> = {
-  buruh: "🏭",
-  pedagang: "🏪",
+  buruh: "👷",
+  pedagang: "🧑‍🍳",
   ojol: "🛵",
-  kreator: "📱",
-  jurnalis: "📰",
+  kreator: "🤳",
+  jurnalis: "🕵️",
   mahasiswa: "🎓",
 };
 
-export const MIMPI_LABEL: Record<string, string> = {
-  beli_rumah: "Beli rumah",
-  naik_haji: "Naik haji",
-  nyekolahin_adik: "Nyekolahin adik",
-  buka_cabang_ketiga: "Buka cabang ke-3",
-  pensiun_tenang: "Pensiun tenang",
-  nikah_tanpa_utang: "Nikah tanpa utang",
+/** Keahlian tiap profesi, satu kalimat. */
+export const PROFESSION_SKILL: Record<string, string> = {
+  buruh: "Gaji paling besar tiap gajian.",
+  pedagang: "Mulai dengan 1 lapak gratis, omzet usaha +50%.",
+  ojol: "Dapat tip DR 200 rb tiap jalan.",
+  kreator: "Petisinya viral: Semangat Demo naik hampir 2x.",
+  jurnalis: "Liputan Media lebih tajam ke Rezim.",
+  mahasiswa: "Tiap Demo Akbar makin sakit buat Rezim.",
 };
 
 export const LEVEL_LABEL = ["Lapak", "Toko", "Cabang", "Brand Lokal"];
 
-export const PLAYER_COLORS = ["#e63946", "#3a86ff", "#2dbe6c", "#ff9f1c", "#9b5de5", "#00bbf9"];
+export const GROUP_COLOR: Record<string, string> = {
+  coklat: "#b07a4a",
+  biru: "#2fb4ee",
+  pink: "#ff6fae",
+  oranye: "#ff962e",
+  merah: "#ef4a4a",
+  kuning: "#f2b90f",
+  hijau: "#35bf68",
+  ungu: "#9a6af5",
+};
+
+export const GROUP_LABEL: Record<string, string> = {
+  coklat: "Coklat",
+  biru: "Biru",
+  pink: "Pink",
+  oranye: "Oranye",
+  merah: "Merah",
+  kuning: "Kuning",
+  hijau: "Hijau",
+  ungu: "Ungu",
+};
+
+export const TILE_ICON: Record<string, string> = {
+  start: "💰",
+  jail: "🚓",
+  go_to_jail: "🚨",
+  card_wa: "💬",
+  card_nasib: "🎴",
+  tax: "🧾",
+  gov_seat: "🪑",
+  demo: "✊",
+  lumbung: "🌾",
+  property: "🏪",
+};
+
+export const PLAYER_COLORS = ["#ff4d5e", "#2f8bff", "#22c06b", "#ffa51f", "#a35cf0", "#00c2c7"];
 export const colorForSeat = (seat: number) => PLAYER_COLORS[seat % PLAYER_COLORS.length];
 
-export function scaled(state: GameState, amount: number): number {
-  return rules.scaled(amount, state.inflationLevel);
+/** 1500000 -> "1,5 jt", 750000 -> "750 rb" */
+export function drPendek(n: number): string {
+  const a = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  const fmt = (v: number) => (Math.round(v * 100) / 100).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+  if (a >= 1e9) return `${sign}${fmt(a / 1e9)} M`;
+  if (a >= 1e6) return `${sign}${fmt(a / 1e6)} jt`;
+  if (a >= 1e3) return `${sign}${fmt(a / 1e3)} rb`;
+  return `${sign}${a}`;
 }
+
+/** Uang dalam DR (Duit Rakyat). */
+export const dr = (n: number): string => `DR ${drPendek(n)}`;
 
 export function playersInOrder(state: GameState): PlayerState[] {
   return state.order.map((id) => state.players[id]);

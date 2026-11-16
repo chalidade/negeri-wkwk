@@ -1,19 +1,19 @@
-// Ukuran dan posisi di dunia 3D. Satu petak = CELL unit.
-export const CELL = 2;
-export const BOARD_SIZE = CELL * 11;
-export const BOARD_TOP = 0.5; // permukaan kayu papan
-export const TILE_H = 0.24;
-export const TILE_TOP = BOARD_TOP + TILE_H;
+// Ukuran dan posisi di dunia 3D. Papan 9x9 petak, 32 petak di tepinya.
+export const N = 9;
+export const CELL = 2.2;
+export const BOARD = N * CELL;
+/** tinggi permukaan atas petak */
+export const TOP = 0.5;
 
-/** Petak 0 di pojok kanan bawah (dekat kamera), berjalan searah jarum jam. */
+/** Petak 0 di pojok kanan bawah (dekat kamera), lalu ke kiri, naik, ke kanan, turun. */
 export function tileCell(index: number): { row: number; col: number } {
-  if (index <= 10) return { row: 10, col: 10 - index };
-  if (index <= 20) return { row: 20 - index, col: 0 };
-  if (index <= 30) return { row: 0, col: index - 20 };
-  return { row: index - 30, col: 10 };
+  if (index <= 8) return { row: 8, col: 8 - index };
+  if (index <= 16) return { row: 16 - index, col: 0 };
+  if (index <= 24) return { row: 0, col: index - 16 };
+  return { row: index - 24, col: 8 };
 }
 
 export function tileXZ(index: number): { x: number; z: number } {
   const c = tileCell(index);
-  return { x: (c.col - 5) * CELL, z: (c.row - 5) * CELL };
+  return { x: (c.col - 4) * CELL, z: (c.row - 4) * CELL };
 }

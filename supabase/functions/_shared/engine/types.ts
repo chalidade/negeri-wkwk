@@ -1,13 +1,7 @@
-// Tipe data inti Negeri Wkwk. File ini dipakai bersama oleh Edge Functions (Deno)
-// dan unit test (Node). Hindari fitur TS yang butuh transpile (enum, namespace).
+// Tipe data inti Negeri Wkwk v2. Dipakai bersama oleh Edge Functions (Deno),
+// klien web (Vite), dan unit test (Node). Hindari fitur TS yang butuh transpile.
 
-export type Profession =
-  | "buruh"
-  | "pedagang"
-  | "ojol"
-  | "kreator"
-  | "jurnalis"
-  | "mahasiswa";
+export type Profession = "buruh" | "pedagang" | "ojol" | "kreator" | "jurnalis" | "mahasiswa";
 
 export const PROFESSIONS: readonly Profession[] = [
   "buruh",
@@ -23,29 +17,27 @@ export type Mode = "rakyat_bersatu" | "juragan";
 export type TileType =
   | "start"
   | "property"
-  | "transport"
-  | "utility"
   | "card_wa"
   | "card_nasib"
   | "tax"
   | "jail"
-  | "posko"
   | "go_to_jail"
-  | "gov_seat";
+  | "gov_seat"
+  | "demo"
+  | "lumbung";
 
 export interface TileDef {
   index: number;
   name: string;
   type: TileType;
   group?: string;
+  /** harga beli usaha, dalam DR */
   price?: number;
-  rent?: number;
+  /** pungutan tetap untuk petak pajak / kursi pejabat, dalam DR */
   amount?: number;
-  umkm?: boolean;
-  random?: boolean;
 }
 
-/** Pemilik khusus untuk petak milik Pemerintah (Big Boss). */
+/** Pemilik khusus untuk petak milik Rezim (Big Boss). */
 export const GOV = "pemerintah";
 
 export interface PlayerState {
@@ -54,37 +46,31 @@ export interface PlayerState {
   seat: number;
   profession: Profession;
   position: number;
+  /** uang pemain dalam DR (Duit Rakyat) */
   cuan: number;
-  tabungan: number;
-  kecurigaan: number;
   jailTurns: number;
   skipNext: boolean;
   bankrupt: boolean;
-  suaraRakyat: number;
-  ordal: number;
-  phkUntilRound: number;
-  /** true kalau pemain ini dijalankan komputer (main solo) */
+  /** true kalau pemain ini dijalankan komputer */
   bot?: boolean;
 }
 
 export interface TileState {
-  /** null = belum dimiliki, GOV = milik Pemerintah, selain itu id pemain */
+  /** null = kosong, GOV = dicaplok Rezim, selain itu id pemain */
   owner: string | null;
   /** 0 Lapak, 1 Toko, 2 Cabang, 3 Brand Lokal */
   level: number;
-  /** Sewa tidak bisa ditagih sampai ronde ini (efek bencana) */
-  disabledUntilRound: number;
 }
 
 export type Phase = "awaiting_roll" | "awaiting_buy" | "awaiting_end" | "game_over";
 
 export type GameResult =
   | { kind: "rakyat_menang" }
-  | { kind: "rakyat_kalah"; reason: "dua_bangkrut" | "waktu_habis" }
+  | { kind: "rakyat_kalah"; reason: "bangkrut" | "pemilu" }
   | { kind: "juragan_menang"; winner: string };
 
 export interface GameState {
-  schema: 1;
+  schema: 2;
   roomId: string;
   mode: Mode;
   round: number;
@@ -95,18 +81,28 @@ export interface GameState {
   turn: number;
   players: Record<string, PlayerState>;
   tiles: TileState[];
-  inflationLevel: number;
-  gerakan: number;
-  kesabaran: number;
+  /** nyawa Rezim. Habis = rakyat menang. */
+  kekuasaan: number;
+  kekuasaanMaks: number;
+  /** meter Semangat Demo: 0 -> 100. Penuh = Demo Akbar. */
+  semangat: number;
+  demoCount: number;
+  /** dana talangan bersama, dalam DR */
   lumbung: number;
-  kasPemerintah: number;
+  /** posisi mobil pejabat (pion Rezim) */
+  rezimPos: number;
+  /** grup warna yang sudah pernah jadi Kampung Mandiri */
+  kampung: string[];
   phase: Phase;
   pendingTile: number | null;
   lastDice: [number, number] | null;
   doublesInRow: number;
   rollAgain: boolean;
+  /** Petisi/Liputan sudah dipakai giliran ini */
   aksiDipakai: boolean;
   result: GameResult | null;
+  /** event publik dari aksi terakhir, untuk animasi di klien */
+  lastEvents: GameEvent[];
 }
 
 export type Action =
@@ -115,7 +111,6 @@ export type Action =
   | { type: "skip_buy" }
   | { type: "upgrade"; tile: number }
   | { type: "bayar_denda" }
-  | { type: "setor_tabungan"; amount: number }
   | { type: "donasi_lumbung"; amount: number }
   | { type: "petisi" }
   | { type: "liputan_media" }

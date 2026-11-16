@@ -1,7 +1,7 @@
-// Otak bot untuk main solo. Fungsi murni: lihat state, pilih SATU aksi.
-// Server memanggil ini berulang-ulang sampai giliran bot selesai, satu aksi per panggilan,
+// Otak bot. Fungsi murni: lihat state, pilih SATU aksi.
+// Dipanggil berulang-ulang sampai giliran bot selesai, satu aksi per panggilan,
 // supaya klien sempat menganimasikan tiap langkah.
-import { TILES } from "./core.ts";
+import { TILES, biayaUpgrade, coop, hargaBeli, kampungMandiri, panik } from "./core.ts";
 import * as R from "./rules.ts";
 import type { Action, GameState, PlayerSecret } from "./types.ts";
 
@@ -20,59 +20,48 @@ export const BOT_NAMES = [
 
 /**
  * Pilih aksi berikutnya untuk bot yang sedang giliran.
- * - Rakyat di mode Rakyat Bersatu: bantu gerakan (liputan, petisi, donasi) sambil tetap berusaha.
+ * - Rakyat di mode Rakyat Bersatu: beli usaha, lalu pakai sisa uang buat melawan Rezim.
  * - Buzzer & mode Juragan: serakah, fokus menimbun dan beli usaha.
  * Aksi opsional selalu dicek dulu syaratnya, jadi engine tidak akan menolak.
  */
 export function decideBotAction(s: GameState, botId: string, role: PlayerSecret["role"] = "rakyat"): Action {
   const p = s.players[botId];
-  const inf = s.inflationLevel;
-  const coop = s.mode === "rakyat_bersatu" && role === "rakyat";
-  // Cadangan supaya tidak bangkrut kena sewa/kebijakan. Bot serakah berani lebih tipis.
-  const reserve = R.scaled(coop ? 220 : 160, inf);
+  const kawan = coop(s) && role === "rakyat";
+  // Cadangan supaya tidak bangkrut kena pungli/kebijakan.
+  const reserve = 2_500_000 * panik(s);
 
   if (s.phase === "awaiting_buy") {
     const idx = s.pendingTile ?? -1;
-    const price = R.scaled(TILES[idx]?.price ?? 0, inf);
-    return price > 0 && p.cuan - price >= reserve ? { type: "buy" } : { type: "skip_buy" };
+    return p.cuan - hargaBeli(s, idx) >= reserve ? { type: "buy" } : { type: "skip_buy" };
   }
-
   if (s.phase !== "awaiting_roll" && s.phase !== "awaiting_end") return { type: "end_turn" };
 
-  // 1. Aksi gerakan (sekali per giliran).
-  if (coop && !s.aksiDipakai) {
-    if (s.lumbung >= R.LIPUTAN_BIAYA_LUMBUNG) return { type: "liputan_media" };
-    const petisi = R.scaled(R.PETISI_BIAYA, inf);
-    const semangat = s.gerakan >= 40 || p.profession === "kreator" || s.round % 2 === 0;
-    if (semangat && p.cuan - petisi >= reserve) return { type: "petisi" };
+  // 1. Aksi perlawanan (sekali per giliran).
+  if (kawan && !s.aksiDipakai) {
+    // Sisakan sedikit Lumbung buat talangan, kecuali Rezim sudah hampir tumbang.
+    const sisa = s.kekuasaan <= 15 ? 0 : 1_500_000;
+    if (s.lumbung >= R.LIPUTAN_BIAYA_LUMBUNG + sisa) return { type: "liputan_media" };
+    if (p.cuan - R.PETISI_BIAYA >= reserve * 2.5) return { type: "petisi" };
   }
 
   if (s.phase === "awaiting_roll") {
     // 2. Kena tilang dan punya uang: bayar denda biar bisa jalan.
-    const denda = R.scaled(R.DENDA_TILANG, inf);
-    if (p.jailTurns > 0 && p.cuan - denda >= reserve) return { type: "bayar_denda" };
+    if (p.jailTurns > 0 && p.cuan - R.DENDA_TILANG >= reserve * 2) return { type: "bayar_denda" };
     return { type: "roll" };
   }
 
-  // 3. Akhir giliran: upgrade usaha termurah yang masih bisa naik level.
+  // 3. Akhir giliran: upgrade usaha. Utamakan yang di Kampung Mandiri, lalu yang termurah.
   let best = -1;
-  let bestCost = Infinity;
+  let bestScore = Infinity;
   s.tiles.forEach((t, i) => {
-    const def = TILES[i];
-    if (t.owner !== botId || def.type !== "property" || t.level >= R.MAX_LEVEL) return;
-    const cost = R.scaled((def.price ?? 0) * R.BIAYA_UPGRADE, inf);
-    if (cost < bestCost) {
+    if (t.owner !== botId || t.level >= R.MAX_LEVEL) return;
+    const score = biayaUpgrade(i) * (kampungMandiri(s, TILES[i].group) ? 0.5 : 1);
+    if (score < bestScore) {
       best = i;
-      bestCost = cost;
+      bestScore = score;
     }
   });
-  if (best >= 0 && p.cuan - bestCost >= reserve * 1.5) return { type: "upgrade", tile: best };
-
-  // 4. Rakyat yang kelebihan uang menyumbang ke Lumbung Bersama.
-  if (coop && p.cuan > reserve * 4) {
-    const amount = Math.floor((p.cuan - reserve * 3) / R.DONASI_PER_SUARA) * R.DONASI_PER_SUARA;
-    if (amount >= R.DONASI_PER_SUARA) return { type: "donasi_lumbung", amount };
-  }
+  if (best >= 0 && p.cuan - biayaUpgrade(best) >= reserve * 2) return { type: "upgrade", tile: best };
 
   return { type: "end_turn" };
 }

@@ -2,29 +2,25 @@
 
 Urutan yang disarankan: Android dulu (lebih murah, nggak butuh Mac), iOS menyusul.
 
-## 0. Sekali saja: siapkan project Flutter
+## 0. Sekali saja: bungkus klien web jadi aplikasi (Capacitor)
 
-Folder `android/` dan `ios/` belum ada di repo. Buat dengan:
+Klien game ada di `web3d/` (Three.js + Vite). Untuk masuk toko aplikasi, hasil build web dibungkus Capacitor.
+**Langkah ini belum dikerjakan di repo**; folder `android/` dan `ios/` belum ada.
 
 ```bash
-cd app
-flutter create . --org com.negeriwkwk --project-name negeri_wkwk --platforms=android,ios
-flutter pub get
+cd web3d
+npm i @capacitor/core @capacitor/cli @capacitor/android @capacitor/ios
+npx cap init "Negeri Wkwk" com.negeriwkwk.app --web-dir dist
+npm run build
+npx cap add android
+npx cap add ios        # hanya bisa di Mac
+npx cap sync
 ```
 
-Perintah ini hanya menambah file yang belum ada; `lib/` tidak ditimpa. Commit hasilnya.
+Commit folder `android/` dan `ios/` yang dihasilkan. Setiap habis mengubah kode web: `npm run build && npx cap sync`.
 
-Lalu samakan identitas aplikasi:
-
-| Yang diatur | Android | iOS |
-| --- | --- | --- |
-| ID aplikasi | `applicationId "com.negeriwkwk.app"` di `android/app/build.gradle(.kts)` | Bundle Identifier `com.negeriwkwk.app` di Xcode (Runner > Signing & Capabilities) |
-| Nama di layar HP | `android:label="Negeri Wkwk"` di `android/app/src/main/AndroidManifest.xml` | `CFBundleDisplayName` = `Negeri Wkwk` di `ios/Runner/Info.plist` |
-| Izin internet | `<uses-permission android:name="android.permission.INTERNET"/>` di AndroidManifest utama | sudah otomatis |
-
-ID aplikasi tidak bisa diganti setelah rilis, jadi tentukan sekarang.
-
-Ikon aplikasi: pakai package `flutter_launcher_icons` dengan gambar 1024x1024 tanpa transparansi.
+ID aplikasi `com.negeriwkwk.app` tidak bisa diganti setelah rilis, jadi tentukan sekarang.
+Ikon dan splash: pakai `@capacitor/assets` dengan gambar 1024x1024 tanpa transparansi.
 
 ## 1. Supabase versi produksi
 
@@ -47,13 +43,8 @@ Ikon aplikasi: pakai package `flutter_launcher_icons` dengan gambar 1024x1024 ta
    ```bash
    keytool -genkey -v -keystore ~/negeri-wkwk-upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
    ```
-   Simpan file `.jks` dan passwordnya baik-baik, jangan di-commit. Ikuti panduan resmi Flutter "Build and release an Android app" untuk `key.properties` dan `signingConfigs`.
-3. Build:
-   ```bash
-   cd app
-   flutter build appbundle --release --dart-define-from-file=env.json
-   ```
-   Hasil: `build/app/outputs/bundle/release/app-release.aab`.
+   Simpan file `.jks` dan passwordnya baik-baik, jangan di-commit.
+3. Build: jalankan `npx cap open android`, lalu di Android Studio pilih Build > Generate Signed App Bundle dan pakai upload key tadi. Hasilnya file `.aab`.
 4. Di Play Console isi: listing (deskripsi, screenshot, ikon 512x512, feature graphic 1024x500), kuesioner rating konten, target audiens (13+ ke atas), formulir **Data safety**, dan link kebijakan privasi + hapus akun.
 5. **Akun pribadi baru wajib closed testing:** minimal 12 tester ikut selama 14 hari berturut-turut sebelum boleh rilis produksi. Ajak teman dan komunitas devlog.
 6. Setelah lolos, ajukan akses produksi dan rilis.
@@ -61,13 +52,8 @@ Ikon aplikasi: pakai package `flutter_launcher_icons` dengan gambar 1024x1024 ta
 ## 4. App Store (butuh Mac + Xcode)
 
 1. Daftar Apple Developer Program (US$99 per tahun).
-2. Buka `app/ios/Runner.xcworkspace` di Xcode, pilih Team di Signing & Capabilities, set Bundle Identifier.
-3. Build dan upload:
-   ```bash
-   cd app
-   flutter build ipa --release --dart-define-from-file=env.json
-   ```
-   Upload `build/ios/ipa/*.ipa` lewat aplikasi Transporter atau Xcode Organizer.
+2. Jalankan `npx cap open ios`, pilih Team di Signing & Capabilities, pastikan Bundle Identifier `com.negeriwkwk.app`.
+3. Di Xcode: Product > Archive, lalu Distribute App ke App Store Connect.
 4. Di App Store Connect: isi App Privacy, age rating, deskripsi, screenshot (iPhone 6,7" dan 6,5"), link kebijakan privasi.
 5. Uji lewat TestFlight, lalu kirim review.
 

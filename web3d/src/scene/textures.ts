@@ -1,264 +1,167 @@
+// Tekstur digambar di canvas saat runtime, jadi tidak perlu file gambar.
 import * as THREE from "three";
-import type { TileDef } from "../shared.ts";
-import { tileCell } from "./layout.ts";
+import { GROUP_COLOR, TILE_ICON, drPendek, type TileDef } from "../shared.ts";
 
-const GROUP_COLOR: Record<string, string> = {
-  coklat: "#8d6e63",
-  biru_muda: "#4fc3f7",
-  pink: "#f06292",
-  oranye: "#ffa726",
-  merah: "#e53935",
-  kuning: "#fdd835",
-  hijau: "#43a047",
-  biru_tua: "#1e3a8a",
-};
+const DISPLAY = '"Lilita One", "Arial Black", sans-serif';
+const EMOJI = '"Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif';
 
-const CORNER_BG: Record<string, string> = {
-  start: "#2dbe6c",
-  jail: "#546e7a",
-  posko: "#3a86ff",
-  go_to_jail: "#e63946",
-};
-
-export function tileEmoji(t: TileDef): string {
-  switch (t.type) {
-    case "start":
-      return "💰";
-    case "card_wa":
-      return "💬";
-    case "card_nasib":
-      return "🎲";
-    case "tax":
-      return "🧾";
-    case "transport":
-      return t.name.includes("Bandara")
-        ? "✈️"
-        : t.name.includes("Pelabuhan")
-          ? "⛴️"
-          : t.name.includes("KRL")
-            ? "🚆"
-            : "🚌";
-    case "utility":
-      return t.name.includes("Listrik") ? "⚡" : "💧";
-    case "jail":
-      return "🚓";
-    case "posko":
-      return "🌊";
-    case "go_to_jail":
-      return "🫵";
-    case "gov_seat":
-      return "🪑";
-    default:
-      return PROPERTY_EMOJI[t.name] ?? "🏠";
-  }
-}
-
-const PROPERTY_EMOJI: Record<string, string> = {
-  "Gang Senggol": "🏚️",
-  "Kontrakan Petak": "🏠",
-  "Pasar Kaget": "🛒",
-  "Warung Kelontong": "🏪",
-  "Kios Pulsa": "📶",
-  "Pangkalan Ojol": "🛵",
-  "Kos-kosan": "🛏️",
-  Angkringan: "🍢",
-  "Ruko Pinggir Jalan": "🏬",
-  "Toko Online": "📦",
-  "Konveksi Rumahan": "🧵",
-  "Perumahan Subsidi": "🏘️",
-  "Kawasan Industri": "🏭",
-  "Kebun Sawit": "🌴",
-  "Villa Puncak": "⛰️",
-  "Resort Pulau Dewata": "🏝️",
-  "Tambang Nikel": "⛏️",
-  "Apartemen Pusat Kota": "🏙️",
-  "Kawasan Elite": "🏰",
-  "Proyek Strategis": "🏗️",
-};
-
-function canvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement("canvas");
-  c.width = size;
-  c.height = size;
+  c.width = w;
+  c.height = h;
   return [c, c.getContext("2d")!];
 }
 
-function texture(c: HTMLCanvasElement): THREE.CanvasTexture {
+function toTexture(c: HTMLCanvasElement): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   return t;
 }
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(" ");
+function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const lines: string[] = [];
   let line = "";
-  for (const w of words) {
-    const test = line ? `${line} ${w}` : w;
-    if (ctx.measureText(test).width > maxWidth && line) {
+  for (const word of text.split(" ")) {
+    const test = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(test).width > maxWidth) {
       lines.push(line);
-      line = w;
-    } else {
-      line = test;
-    }
+      line = word;
+    } else line = test;
   }
   if (line) lines.push(line);
   return lines.slice(0, 2);
 }
 
-/** Tekstur permukaan atas petak: warna dasar, pita grup, ikon, nama, harga. */
+const SPECIAL_BG: Record<string, [string, string]> = {
+  start: ["#ffe066", "#ffb703"],
+  jail: ["#cfe0f1", "#8fa9c4"],
+  go_to_jail: ["#aebdd0", "#5d7391"],
+  card_wa: ["#d6f8de", "#74d68b"],
+  card_nasib: ["#ffe9bf", "#ffb44d"],
+  tax: ["#ffd6d6", "#ff8585"],
+  gov_seat: ["#565c6b", "#2b2f3a"],
+  demo: ["#ff9b9b", "#f03e3e"],
+  lumbung: ["#fff1b8", "#f3c53c"],
+};
+
+/** Sisi atas petak. Bagian bawah canvas menghadap kamera. */
 export function tileTexture(t: TileDef): THREE.CanvasTexture {
   const S = 256;
-  const [c, ctx] = canvas(S);
-  const corner = t.index % 10 === 0;
-  const gov = t.type === "gov_seat";
-  const bg = corner ? CORNER_BG[t.type] ?? "#fff4dc" : gov ? "#2b2b3a" : "#fff4dc";
-  const fg = (corner && t.type !== "start") || gov ? "#ffffff" : "#3b2a1a";
-
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, S, S);
-  // tekstur kertas halus
-  ctx.fillStyle = "rgba(0,0,0,0.035)";
-  for (let i = 0; i < 300; i++) ctx.fillRect((i * 97) % S, (i * 389) % S, 2, 2);
-
-  // pita grup menghadap ke tengah papan
-  if (t.group) {
-    ctx.fillStyle = GROUP_COLOR[t.group] ?? "#999";
-    const b = 50;
-    const { row, col } = tileCell(t.index);
-    if (row === 10) ctx.fillRect(0, 0, S, b);
-    else if (row === 0) ctx.fillRect(0, S - b, S, b);
-    else if (col === 0) ctx.fillRect(S - b, 0, b, S);
-    else ctx.fillRect(0, 0, b, S);
-  }
-
+  const [c, ctx] = canvas(S, S);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `${corner ? 104 : 84}px "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
-  // Paksa tampilan emoji berwarna (\uFE0F); kalau perangkat hanya punya glyph hitam-putih,
-  // tetap terlihat karena warnanya diset gelap.
-  ctx.fillStyle = fg;
-  ctx.fillText(tileEmoji(t).replace(/\uFE0F/g, "") + "\uFE0F", S / 2, corner ? 100 : 108);
 
-  ctx.fillStyle = fg;
-  ctx.font = `800 ${corner ? 30 : 27}px Nunito, sans-serif`;
-  const lines = wrapText(ctx, t.name, S - 36);
-  lines.forEach((l, i) => ctx.fillText(l, S / 2, (corner ? 190 : 176) + i * 30));
-
-  if (t.price) {
-    ctx.font = "900 24px Nunito, sans-serif";
-    ctx.fillStyle = corner ? fg : "#9c6b3c";
-    ctx.fillText(`₵${t.price}`, S / 2, 236);
+  if (t.type === "property") {
+    // Lahan tempat bangunan berdiri di belakang, pita warna berisi nama + harga di depan.
+    ctx.fillStyle = "#dff3c4";
+    ctx.fillRect(0, 0, S, S);
+    ctx.fillStyle = "#cdebab";
+    for (let i = 0; i < 5; i++) ctx.fillRect(18 + i * 46, 12, 26, 100);
+    const band = GROUP_COLOR[t.group ?? ""] ?? "#888";
+    ctx.fillStyle = band;
+    ctx.fillRect(0, 124, S, S - 124);
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillRect(0, 124, S, 8);
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "rgba(0,0,0,0.45)";
+    ctx.lineWidth = 7;
+    ctx.lineJoin = "round";
+    ctx.font = `38px ${DISPLAY}`;
+    const lines = wrap(ctx, t.name, S - 16);
+    const y0 = lines.length === 1 ? 168 : 158;
+    lines.forEach((l, i) => {
+      ctx.strokeText(l, S / 2, y0 + i * 36, S - 12);
+      ctx.fillText(l, S / 2, y0 + i * 36, S - 12);
+    });
+    ctx.font = `34px ${DISPLAY}`;
+    ctx.fillStyle = "#fff3a6";
+    const py = lines.length === 1 ? 218 : 231;
+    ctx.strokeText(drPendek(t.price ?? 0), S / 2, py);
+    ctx.fillText(drPendek(t.price ?? 0), S / 2, py);
+  } else {
+    const [a, b] = SPECIAL_BG[t.type] ?? ["#fff", "#ddd"];
+    const g = ctx.createLinearGradient(0, 0, 0, S);
+    g.addColorStop(0, a);
+    g.addColorStop(1, b);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+    ctx.font = `112px ${EMOJI}`;
+    ctx.fillStyle = "#222";
+    ctx.fillText(TILE_ICON[t.type] ?? "❔", S / 2, 88);
+    const dark = t.type === "gov_seat" || t.type === "go_to_jail";
+    ctx.font = `38px ${DISPLAY}`;
+    ctx.lineWidth = 7;
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = dark ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.75)";
+    ctx.fillStyle = dark ? "#fff" : "#3a2a12";
+    const lines = wrap(ctx, t.name, S - 20);
+    const y0 = lines.length === 1 ? 204 : 182;
+    lines.forEach((l, i) => {
+      ctx.strokeText(l, S / 2, y0 + i * 38, S - 12);
+      ctx.fillText(l, S / 2, y0 + i * 38, S - 12);
+    });
   }
 
-  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.strokeStyle = "rgba(0,0,0,0.18)";
   ctx.lineWidth = 6;
   ctx.strokeRect(3, 3, S - 6, S - 6);
-  return texture(c);
+  return toTexture(c);
 }
 
-/** Tekstur tengah papan: batik kawung + judul. */
-export function centerTexture(): THREE.CanvasTexture {
+/** Halaman tengah: rumput dengan jalan setapak menuju Istana. */
+export function lawnTexture(): THREE.CanvasTexture {
   const S = 1024;
-  const [c, ctx] = canvas(S);
-  const g = ctx.createRadialGradient(S / 2, S / 2, 80, S / 2, S / 2, S * 0.7);
-  g.addColorStop(0, "#fff7e3");
-  g.addColorStop(1, "#ecd29f");
-  ctx.fillStyle = g;
+  const [c, ctx] = canvas(S, S);
+  ctx.fillStyle = "#8ed06a";
   ctx.fillRect(0, 0, S, S);
-
-  // kawung
-  ctx.strokeStyle = "rgba(160, 82, 45, 0.18)";
-  ctx.lineWidth = 3;
-  const step = S / 9;
-  for (let x = 0; x <= S; x += step) {
-    for (let y = 0; y <= S; y += step) {
-      for (let k = 0; k < 4; k++) {
-        const a = (k * Math.PI) / 2 + Math.PI / 4;
-        ctx.beginPath();
-        ctx.ellipse(x + Math.cos(a) * step * 0.22, y + Math.sin(a) * step * 0.22, step * 0.16, step * 0.1, a, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+  // kotak-kotak rumput ala taman
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      if ((x + y) % 2 === 0) continue;
+      ctx.fillStyle = "#86c962";
+      ctx.fillRect(x * 128, y * 128, 128, 128);
     }
   }
-
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = '150px "Lilita One", Nunito, sans-serif';
-  ctx.fillStyle = "#e63946";
-  ctx.shadowColor = "rgba(0,0,0,0.25)";
-  ctx.shadowOffsetX = 6;
-  ctx.shadowOffsetY = 8;
-  ctx.fillText("NEGERI", S / 2, S * 0.5);
-  ctx.font = '230px "Lilita One", Nunito, sans-serif';
-  ctx.fillStyle = "#5c3a1a";
-  ctx.shadowColor = "#ffc94d";
-  ctx.shadowOffsetX = 8;
-  ctx.shadowOffsetY = 8;
-  ctx.fillText("WKWK", S / 2, S * 0.66);
-  ctx.shadowColor = "transparent";
-  ctx.font = "800 40px Nunito, sans-serif";
-  ctx.fillStyle = "#7a4f27";
-  ctx.fillText("Rakyat bersatu melawan sistem", S / 2, S * 0.78);
-
-  ctx.strokeStyle = "#c9a066";
-  ctx.lineWidth = 14;
-  ctx.strokeRect(10, 10, S - 20, S - 20);
-  return texture(c);
-}
-
-/** Muka dadu dengan titik. */
-export function dieFaceTexture(value: number): THREE.CanvasTexture {
-  const S = 128;
-  const [c, ctx] = canvas(S);
-  ctx.fillStyle = "#fbf8ff";
-  ctx.fillRect(0, 0, S, S);
-  ctx.strokeStyle = "#ddd5ea";
-  ctx.lineWidth = 8;
-  ctx.strokeRect(4, 4, S - 8, S - 8);
-  const a = 0.27;
-  const b = 0.5;
-  const d = 0.73;
-  const spots: number[][] = [
-    [],
-    [b, b],
-    [a, a, d, d],
-    [a, a, b, b, d, d],
-    [a, a, d, a, a, d, d, d],
-    [a, a, d, a, b, b, a, d, d, d],
-    [a, a, d, a, a, b, d, b, a, d, d, d],
-  ];
-  ctx.fillStyle = value === 1 ? "#e63946" : "#1b1035";
-  const r = value === 1 ? 17 : 12;
-  const s = spots[value];
-  for (let i = 0; i < s.length; i += 2) {
-    ctx.beginPath();
-    ctx.arc(s[i] * S, s[i + 1] * S, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  return texture(c);
-}
-
-/** Label nama di atas pion (sprite). */
-export function labelTexture(text: string, color: string): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
-  c.width = 256;
-  c.height = 64;
-  const ctx = c.getContext("2d")!;
-  ctx.font = "900 30px Nunito, sans-serif";
-  const w = Math.min(248, ctx.measureText(text).width + 28);
-  ctx.fillStyle = "rgba(23,14,46,0.85)";
-  const x = (256 - w) / 2;
+  // alun-alun bundar + jalan ke empat arah
+  ctx.fillStyle = "#f2e3b6";
+  ctx.fillRect(S / 2 - 46, 0, 92, S);
+  ctx.fillRect(0, S / 2 - 46, S, 92);
   ctx.beginPath();
-  ctx.roundRect(x, 8, w, 48, 24);
+  ctx.arc(S / 2, S / 2, 300, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 4;
+  ctx.fillStyle = "#e6d39c";
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, 262, 0, Math.PI * 2);
+  ctx.fill();
+  return toTexture(c);
+}
+
+export function skyTexture(): THREE.CanvasTexture {
+  const [c, ctx] = canvas(8, 512);
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, "#1e9bf0");
+  g.addColorStop(0.55, "#6fd0ff");
+  g.addColorStop(1, "#d9f6ff");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 512);
+  return toTexture(c);
+}
+
+export function labelTexture(text: string, color: string): THREE.CanvasTexture {
+  const [c, ctx] = canvas(320, 80);
+  ctx.font = `40px ${DISPLAY}`;
+  const w = Math.min(304, ctx.measureText(text).width + 44);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.roundRect((320 - w) / 2, 10, w, 60, 30);
+  ctx.fill();
   ctx.stroke();
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, 128, 33);
-  return texture(c);
+  ctx.fillText(text, 160, 43, 280);
+  return toTexture(c);
 }
