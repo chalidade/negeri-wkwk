@@ -136,7 +136,10 @@ export function tileTexture(t: TileDef): THREE.CanvasTexture {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `${corner ? 104 : 84}px "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
-  ctx.fillText(tileEmoji(t), S / 2, corner ? 100 : 108);
+  // Paksa tampilan emoji berwarna (\uFE0F); kalau perangkat hanya punya glyph hitam-putih,
+  // tetap terlihat karena warnanya diset gelap.
+  ctx.fillStyle = fg;
+  ctx.fillText(tileEmoji(t).replace(/\uFE0F/g, "") + "\uFE0F", S / 2, corner ? 100 : 108);
 
   ctx.fillStyle = fg;
   ctx.font = `800 ${corner ? 30 : 27}px Nunito, sans-serif`;
