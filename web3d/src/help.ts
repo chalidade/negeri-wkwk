@@ -4,13 +4,15 @@ import { sfx } from "./sfx.ts";
 
 const SLIDES: [string, string, string][] = [
   ["🎯", "Tumbangkan Rezim", "Semua warga satu tim. Habiskan ❤️ Kekuasaan Rezim sebelum Pemilu di ronde 20. Kalau telat, Rezim menang lagi."],
-  ["🏪", "Cari duit dulu", "Lempar dadu, beli usaha. Tiap lewat petak Gajian kamu dapat gaji + omzet dari semua usahamu."],
+  ["🎲", "Tahan dadu, atur tenaga", "Tahan tombol dadu, lalu lepas di Pelan, Sedang, atau Kencang. Petak yang menyala itu tempat kamu bisa mendarat: incar usaha kosong, hindari pungli."],
+  ["🏪", "Cari duit dulu", "Beli usaha. Tiap lewat petak Gajian kamu dapat gaji + omzet dari semua usahamu."],
   ["✊", "Isi Semangat Demo", "Beli usaha, bikin petisi, bahkan kena pungli bikin warga makin marah. Meter penuh = DEMO AKBAR dan Kekuasaan Rezim rontok."],
+  ["⚡", "Jurus profesi", "Tiap profesi punya jurus pamungkas yang terisi tiap beberapa giliran. Pakai di saat yang pas, lalu rebut gelar MVP."],
   ["🚘", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan ngawur, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
   ["🌾", "Saling jaga", "Lumbung Bersama otomatis menalangi warga yang nggak sanggup bayar. Kalau 2 warga bangkrut, semua kalah."],
 ];
 
-export const HELP_SEEN = "wkwk.help";
+export const HELP_SEEN = "wkwk.help.v3";
 
 export function showHelp(onDone?: () => void): void {
   let i = 0;
@@ -49,26 +51,70 @@ export interface Stats {
   streak: number;
   /** ronde tercepat menumbangkan Rezim */
   rekor: number | null;
+  /** babak tertinggi yang sudah terbuka (solo) */
+  babak: number;
+  /** bintang terbaik tiap babak */
+  bintang: Record<string, number>;
+  xp: number;
+  /** Emas Antum hasil main (mata uang kosmetik) */
+  emas: number;
+}
+
+export interface Hadiah {
+  bintang: number;
+  xp: number;
+  emas: number;
+  /** babak yang baru terbuka gara-gara kemenangan ini */
+  babakBaru: number | null;
 }
 
 const STATS_KEY = "wkwk.stats";
+const KOSONG: Stats = { main: 0, menang: 0, streak: 0, rekor: null, babak: 1, bintang: {}, xp: 0, emas: 0 };
 
 export function getStats(): Stats {
   try {
-    return { main: 0, menang: 0, streak: 0, rekor: null, ...JSON.parse(localStorage.getItem(STATS_KEY) ?? "{}") };
+    return { ...KOSONG, ...JSON.parse(localStorage.getItem(STATS_KEY) ?? "{}") };
   } catch {
-    return { main: 0, menang: 0, streak: 0, rekor: null };
+    return { ...KOSONG };
   }
 }
 
-export function recordResult(win: boolean, round: number): Stats {
+/** Catat hasil satu permainan dan hitung hadiahnya. */
+export function recordGame(o: {
+  win: boolean;
+  round: number;
+  maxRounds: number;
+  level: number;
+  mvp: boolean;
+  jasa: number;
+  solo: boolean;
+  maxBabak: number;
+}): { stats: Stats; hadiah: Hadiah } {
   const s = getStats();
+  // ★ menang, ★★ menang dengan sisa 3 ronde atau lebih, ★★★ sekaligus jadi MVP
+  const bintang = o.win ? 1 + (o.round <= o.maxRounds - 3 ? 1 : 0) + (o.mvp ? 1 : 0) : 0;
+  const pertama = o.solo && o.win && !s.bintang[o.level];
+  const hadiah: Hadiah = {
+    bintang,
+    xp: 20 + (o.win ? 40 : 0) + bintang * 15 + Math.min(60, Math.round(o.jasa / 3)) + (o.mvp ? 20 : 0),
+    emas: bintang * 5 + (pertama ? 15 : 0),
+    babakBaru: null,
+  };
   s.main += 1;
-  if (win) {
+  s.xp += hadiah.xp;
+  s.emas += hadiah.emas;
+  if (o.win) {
     s.menang += 1;
     s.streak += 1;
-    s.rekor = s.rekor === null ? round : Math.min(s.rekor, round);
+    s.rekor = s.rekor === null ? o.round : Math.min(s.rekor, o.round);
+    if (o.solo) {
+      s.bintang[o.level] = Math.max(s.bintang[o.level] ?? 0, bintang);
+      if (o.level >= s.babak && o.level < o.maxBabak) {
+        s.babak = o.level + 1;
+        hadiah.babakBaru = s.babak;
+      }
+    }
   } else s.streak = 0;
   localStorage.setItem(STATS_KEY, JSON.stringify(s));
-  return s;
+  return { stats: s, hadiah };
 }

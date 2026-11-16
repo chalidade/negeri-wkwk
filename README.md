@@ -12,7 +12,10 @@ Main di browser: https://negeri-wkwk.vercel.app
 - **Rezim:** tiap akhir ronde keluar satu Kebijakan (atau bencana), lalu mobil pejabat jalan. Petak kosong dicaplok; kalau mampir ke usaha rakyat, dia yang bayar dan Kekuasaannya turun.
 - **🌾 Lumbung Bersama:** dana talangan. Otomatis menalangi warga yang tidak sanggup bayar, dan bisa mendanai Liputan Media.
 - **Kampung Mandiri:** satu warna dikuasai rakyat (boleh beda orang) = omzet dan sewa 2x, Kekuasaan turun.
-- **Profesi:** Buruh, Pedagang, Ojol, Kreator, Jurnalis, Mahasiswa. Masing-masing punya satu keahlian.
+- **Profesi:** Buruh, Pedagang, Ojol, Kreator, Jurnalis, Mahasiswa. Masing-masing punya satu keahlian dan satu jurus pamungkas yang terisi tiap beberapa giliran.
+- **Dadu kendali:** tahan tombol dadu, lepas di tenaga Pelan (2–5), Sedang (6–8), atau Kencang (9–12). Jitu 75%.
+- **Babak:** di mode solo, tiap menang Rezim berikutnya terbuka (10 babak, makin tebal dan makin rakus). Tiap game memberi bintang, XP pangkat, dan Emas Antum.
+- **MVP:** jasa tiap warga melawan Rezim dihitung; yang terbanyak dapat mahkota.
 
 Mode kedua, **Juragan**, bersaing jadi yang paling tajir; Rezim tetap mengganggu.
 

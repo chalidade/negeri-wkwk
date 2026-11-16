@@ -2,13 +2,19 @@
 import { ApiError, type GameRow } from "./api.ts";
 import { h, modal, sceneEl, toast, ui } from "./dom.ts";
 import type { Driver } from "./driver.ts";
-import { HELP_SEEN, recordResult, showHelp } from "./help.ts";
+import { HELP_SEEN, recordGame, showHelp } from "./help.ts";
 import { GameScene } from "./scene/game-scene.ts";
 import { isMuted, sfx, toggleMute } from "./sfx.ts";
 import { describe, resultTitle } from "./story.ts";
 import {
+  BABAK,
   DENDA_TILANG,
+  GAYA,
   GOV,
+  JURUS,
+  JURUS_PENUH,
+  MAX_BABAK,
+  pangkat,
   GROUP_COLOR,
   GROUP_LABEL,
   KAMPUNG_DAMAGE,
@@ -52,7 +58,10 @@ const PIPS: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0,
 /** rotasi kubus CSS supaya sisi bernilai v menghadap pemain */
 const FACE_ROT: Record<number, [number, number]> = { 1: [0, 0], 6: [0, 180], 2: [0, -90], 5: [0, 90], 3: [-90, 0], 4: [90, 0] };
 
-export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?: () => void }): () => void {
+export function startGame(
+  driver: Driver,
+  opts: { onExit: () => void; onReplay?: (level: number) => void },
+): () => void {
   let { state, version } = driver.current();
   const me = driver.me;
   const coop = state.mode === "rakyat_bersatu";
@@ -74,7 +83,9 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
   scene.onStep = () => sfx.step();
   scene.sync(state);
 
-  const wait = (ms: number) => new Promise<void>((r) => (disposed ? r() : setTimeout(r, ms / speed)));
+  /** pengali tempo tambahan: giliran bot diputar lebih cepat supaya kamu cepat main lagi */
+  let tempo = 1;
+  const wait = (ms: number) => new Promise<void>((r) => (disposed ? r() : setTimeout(r, ms / (speed * tempo))));
   const nm = (id: string | undefined) => (id === me ? "Kamu" : (state.players[id ?? ""]?.name ?? "Warga"));
   const myTurn = () => state.phase !== "game_over" && state.order[state.turn] === me;
 
@@ -95,11 +106,16 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
   const boss = h(
     "div",
     { class: "boss", onclick: () => showHelp() },
-    h("div", { class: "boss-face" }, "🏛️"),
+    h("div", { class: "boss-face" }, driver.local ? BABAK[state.level - 1].emoji : "🏛️"),
     h(
       "div",
       { class: "boss-main" },
-      h("div", { class: "boss-name" }, h("span", {}, "KEKUASAAN REZIM"), panikBadge),
+      h(
+        "div",
+        { class: "boss-name" },
+        h("span", {}, driver.local ? `BABAK ${state.level} · ${BABAK[state.level - 1].nama.toUpperCase()}` : "KEKUASAAN REZIM"),
+        panikBadge,
+      ),
       hpBar,
       h("div", { class: "bar sm" }, smFill, smText),
     ),
@@ -155,11 +171,13 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
     smFill.style.width = `${shownS}%`;
     smText.textContent = shownS >= 100 ? "✊ DEMO AKBAR!" : shownS >= 75 ? `✊ Semangat Demo ${shownS}%  ·  dikit lagi DEMO!` : `✊ Semangat Demo ${shownS}%`;
     panikBadge.style.display = shownK > 0 && shownK <= batasPanik(state) ? "" : "none";
+    const jasaMaks = Math.max(...playersInOrder(state).map((p) => p.jasa));
     for (const p of playersInOrder(state)) {
       const c = chipEls.get(p.id)!;
       c.money.textContent = p.bankrupt ? "bangkrut" : `${drPendek(p.cuan)}${p.jailTurns > 0 ? " 🚓" : ""}`;
       c.el.classList.toggle("active", state.phase !== "game_over" && state.order[state.turn] === p.id);
       c.el.classList.toggle("dead", p.bankrupt);
+      c.el.classList.toggle("mvp", coop && p.jasa > 0 && p.jasa === jasaMaks);
     }
   }
 
@@ -263,7 +281,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
     return h("div", { class: "die" }, face(1, "f1"), face(6, "f6"), face(2, "f2"), face(5, "f5"), face(3, "f3"), face(4, "f4"));
   }
 
-  async function rollDice(values: number[]): Promise<void> {
+  async function rollDice(values: number[], tag = ""): Promise<void> {
     sfx.dice();
     navigator.vibrate?.(30);
     const dice = values.map((v) => {
@@ -280,7 +298,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
     });
     const kembar = values[0] === values[1];
     const total = h("div", { class: "dice-total" }, kembar ? `${values[0] + values[1]} · KEMBAR!` : String(values[0] + values[1]));
-    const wrap = h("div", { class: "dice" }, h("div", { class: "dice-row" }, ...dice), total);
+    const wrap = h("div", { class: "dice" }, h("div", { class: "dice-row" }, ...dice), total, tag ? h("div", { class: "dice-tag" }, tag) : null);
     fx.append(wrap);
     await wait(1050);
     wrap.classList.add("out");
@@ -403,15 +421,31 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
   async function play(events: GameEvent[], next: GameState): Promise<void> {
     for (const e of events) {
       if (disposed) return;
+      tempo = e.actor && e.actor !== me && next.players[e.actor]?.bot ? 1.9 : 1;
+      scene.speed = speed * tempo;
       const p = e.payload as Record<string, never>;
       const a = e.actor;
       const mine = a === me;
       const line = describe(e, next, me);
       switch (e.type) {
-        case "dadu":
+        case "dadu": {
           if (a) scene.focusPawn(a);
-          await rollDice(p.dadu as number[]);
+          const g = GAYA.find((x) => x.id === p.gaya);
+          await rollDice(p.dadu as number[], g ? (p.kena ? `${g.label} ✓` : "MELESET!") : "");
           break;
+        }
+        case "jurus": {
+          const j = JURUS[String(p.profesi)];
+          sfx.fanfare();
+          navigator.vibrate?.(60);
+          if (a) {
+            scene.focusPawn(a);
+            scene.burstAtPawn(a, "confetti");
+          }
+          say(line!, "good");
+          await banner("gold", `${j.emoji} ${j.nama.toUpperCase()}!`, `${mine ? "Jurusmu" : `Jurus ${nm(a)}`}: ${j.efek}`, mine ? 1500 : 1100);
+          break;
+        }
         case "gerak":
           if (a) await scene.movePawn(a, Number(p.dari), Number(p.ke));
           break;
@@ -468,6 +502,12 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
         case "kartu": {
           const baik = Boolean(p.baik);
           baik ? sfx.good() : sfx.bad();
+          if (!mine) {
+            if (a) scene.burstAtPawn(a, baik ? "coins" : "dust");
+            say(`${line} (${p.teks})`, baik ? "good" : "bad");
+            await wait(900);
+            break;
+          }
           await cardPop(
             {
               kicker: p.dek === "grup_wa" ? "💬 GRUP WA KELUARGA" : "🎴 NASIB WNI",
@@ -477,7 +517,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
               kind: baik ? "good" : "bad",
               foot: mine ? "Kamu yang dapat" : `${nm(a)} yang dapat`,
             },
-            mine ? 3000 : 1700,
+            3200,
           );
           if (a) scene.burstAtPawn(a, baik ? "coins" : "dust");
           say(line!, baik ? "good" : "bad");
@@ -496,7 +536,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
               kind: bencana ? "bencana" : "rezim",
               foot: "Berlaku untuk semua warga",
             },
-            3000,
+            2600,
           );
           say(line!, "bad");
           await kebijakanFx(String(p.id), next);
@@ -682,6 +722,8 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
       const berurutan = row.version === version + 1;
       version = row.version;
       if (berurutan) await play(row.state.lastEvents ?? [], row.state);
+      tempo = 1;
+      scene.speed = speed;
       if (disposed) return;
       state = row.state;
       scene.sync(state);
@@ -719,7 +761,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
       } catch {
         botTimer = setTimeout(afterIdle, 2500);
       }
-    }, (driver.local ? 380 : 700) / speed + rank * 3000);
+    }, (driver.local ? 160 : 600) / speed + rank * 3000);
   }
 
   let overShown = false;
@@ -728,34 +770,62 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
     overShown = true;
     driver.forget();
     const res = resultTitle(state, me);
-    const stats = recordResult(res.win, state.round);
+    const meP = state.players[me];
+    const urut = [...playersInOrder(state)].sort((x, y) => (coop ? y.jasa - x.jasa : netWorth(state, y) - netWorth(state, x)));
+    const mvp = coop && !!meP && urut[0].id === me && meP.jasa > 0;
+    const { stats, hadiah } = recordGame({
+      win: res.win,
+      round: state.round,
+      maxRounds: state.maxRounds,
+      level: state.level,
+      mvp,
+      jasa: meP?.jasa ?? 0,
+      solo: driver.local,
+      maxBabak: MAX_BABAK,
+    });
     if (state.result?.kind === "rakyat_menang") {
       sfx.fanfare();
       await scene.collapseIstana();
       confetti();
     } else res.win ? sfx.fanfare() : sfx.lose();
-    const ranking = [...playersInOrder(state)].sort((x, y) => netWorth(state, y) - netWorth(state, x));
+    const pk = pangkat(stats.xp);
+    const lanjut = hadiah.babakBaru ?? state.level;
     modal(
       h(
         "div",
         { class: `sheet col over ${res.win ? "win" : "lose"}` },
         h("div", { class: "over-icon" }, res.win ? "🎉" : "😭"),
         h("div", { class: "over-title" }, res.title),
+        res.win
+          ? h("div", { class: "stars" }, ...[1, 2, 3].map((i) => h("span", { class: i <= hadiah.bintang ? "on" : "", style: `animation-delay:${i * 0.28}s` }, "★")))
+          : null,
         h("div", { class: "over-sub" }, res.sub),
+        coop ? h("div", { class: `tag ${mvp ? "mvp-tag" : "mvp-lain"}` }, mvp ? "👑 Kamu MVP!" : `👑 MVP: ${urut[0].name}`) : null,
         h(
           "div",
           { class: "rank" },
-          ...ranking.map((p, i) =>
+          ...urut.map((p, i) =>
             h(
               "div",
-              { class: "rank-row" },
+              { class: `rank-row${p.id === me ? " me" : ""}` },
               h("span", {}, `${i + 1}. ${p.bankrupt ? "💀" : (PROFESSION_EMOJI[p.profession] ?? "")} ${p.id === me ? "Kamu" : p.name}`),
-              h("b", {}, dr(netWorth(state, p))),
+              h("b", {}, coop ? `${p.jasa} jasa` : dr(netWorth(state, p))),
             ),
           ),
         ),
-        h("div", { class: "muted" }, `🏆 Menang ${stats.menang}/${stats.main}  ·  🔥 Beruntun ${stats.streak}${stats.rekor ? `  ·  ⚡ Rekor ronde ${stats.rekor}` : ""}`),
-        opts.onReplay ? h("button", { class: "btn big", onclick: () => opts.onReplay!() }, res.win ? "Main Lagi 🎲" : "Balas Dendam 🔥") : null,
+        h("div", { class: "reward" }, h("b", {}, `+${hadiah.xp} XP`), hadiah.emas > 0 ? h("b", {}, `+${hadiah.emas} 🪙 Emas Antum`) : null),
+        h("div", { class: "xpbar" }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` }), h("b", {}, pk.berikut ? `🎖️ ${pk.nama} → ${pk.berikut}` : `🎖️ ${pk.nama}`)),
+        hadiah.babakBaru ? h("div", { class: "unlock" }, `🔓 Babak ${hadiah.babakBaru} terbuka: ${BABAK[hadiah.babakBaru - 1].nama}`) : null,
+        res.win && hadiah.bintang < 3
+          ? h("div", { class: "muted small" }, "★★ menang dengan sisa 3 ronde atau lebih  ·  ★★★ sekaligus jadi MVP")
+          : null,
+        opts.onReplay
+          ? h(
+              "button",
+              { class: "btn big", onclick: () => opts.onReplay!(lanjut) },
+              res.win ? (hadiah.babakBaru ? `Lanjut Babak ${hadiah.babakBaru} ▶` : "Main Lagi 🎲") : "Balas Dendam 🔥",
+            )
+          : null,
         h("button", { class: "btn grey", onclick: () => opts.onExit() }, "Beranda"),
       ),
       undefined,
@@ -789,19 +859,148 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
     }
   }
 
+  // --- meteran tenaga dadu (tahan tombol, lepas di zona yang diincar)
+  let gaugeRaf = 0;
+  function tutupMeteran(): void {
+    cancelAnimationFrame(gaugeRaf);
+    scene.highlight();
+  }
+
+  /** Enak tidaknya mendarat di sebuah petak buatku: 1 bagus, -1 bahaya, 0 biasa. */
+  function mutuPetak(i: number): number {
+    const def = TILES[i];
+    const t = state.tiles[i];
+    const meP = state.players[me];
+    if (def.type === "property") {
+      if (t.owner === null) return meP.cuan >= hargaBeli(state, i) ? 1 : 0;
+      if (t.owner === me) return 1;
+      return t.owner === GOV ? -1 : 0;
+    }
+    if (def.type === "tax" || def.type === "gov_seat" || def.type === "go_to_jail") return -1;
+    return def.type === "demo" || def.type === "lumbung" || def.type === "start" ? 1 : 0;
+  }
+
+  /** Pasang meteran pada tombol dadu. Mengembalikan panel meteran untuk ditaruh di atas tombol. */
+  function pasangMeteran(btn: HTMLButtonElement): HTMLElement {
+    let aktif = false;
+    let modeTap = false;
+    let zona = -1;
+    let turun = 0;
+    const pos = state.players[me].position;
+    const petak = GAYA.map((g) => {
+      const idx: number[] = [];
+      for (let k = g.kisaran[0]; k <= g.kisaran[1]; k++) idx.push((pos + k) % TILES.length);
+      return idx;
+    });
+    const zones = GAYA.map((g, z) => {
+      const bagus = petak[z].filter((i) => mutuPetak(i) > 0).length;
+      const bahaya = petak[z].filter((i) => mutuPetak(i) < 0).length;
+      return h(
+        "div",
+        { class: "g-zone on", style: `background:${g.warna}` },
+        h("b", {}, g.label),
+        h("small", {}, `${g.kisaran[0]}–${g.kisaran[1]} langkah`),
+        h("span", { class: "g-mutu" }, `${bagus ? `👍${bagus}` : ""}${bagus && bahaya ? "  " : ""}${bahaya ? `⚠️${bahaya}` : ""}` || "biasa"),
+      );
+    });
+    const marker = h("i", { class: "g-marker", style: "display:none" });
+    const info = h("div", { class: "g-title" }, "Tahan dadu, lepas di tenaga yang kamu mau. 👍 petak bagus, ⚠️ pungutan.");
+    const panel = h("div", { class: "gauge" }, h("div", { class: "g-bar" }, ...zones, marker), info);
+    // Sebelum ditahan: semua kemungkinan menyala di papan, sesuai warna tenaganya.
+    scene.overview();
+    scene.highlight(petak.map((tiles, z) => ({ tiles, color: GAYA[z].warna })));
+
+    const mulai = () => {
+      aktif = true;
+      zona = -1;
+      marker.style.display = "";
+      const t0 = performance.now();
+      const tick = () => {
+        const t = ((performance.now() - t0) / 820) % 2; // penanda bolak-balik
+        const x = t < 1 ? t : 2 - t;
+        marker.style.left = `${x * 100}%`;
+        const z = Math.min(2, Math.floor(x * 3));
+        if (z !== zona) {
+          zona = z;
+          zones.forEach((el, i) => el.classList.toggle("on", i === z));
+          scene.highlight([{ tiles: petak[z], color: GAYA[z].warna }]);
+          info.textContent = petak[z].map((i) => `${mutuPetak(i) > 0 ? "👍 " : mutuPetak(i) < 0 ? "⚠️ " : ""}${TILES[i].name}`).join(" · ");
+          sfx.step();
+        }
+        gaugeRaf = requestAnimationFrame(tick);
+      };
+      tick();
+    };
+    const lempar = () => {
+      if (!aktif) return;
+      aktif = false;
+      const gaya = GAYA[Math.max(0, zona)].id;
+      tutupMeteran();
+      void send({ type: "roll", gaya });
+    };
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    btn.addEventListener("pointerdown", (e) => {
+      if (btn.disabled || sending || playing) return;
+      e.preventDefault();
+      if (aktif && modeTap) return lempar(); // ketukan kedua mengunci tenaga
+      btn.setPointerCapture?.(e.pointerId);
+      turun = performance.now();
+      modeTap = false;
+      mulai();
+    });
+    btn.addEventListener("pointerup", () => {
+      if (!aktif || modeTap) return;
+      // Ketukan singkat: meteran tetap jalan, ketuk sekali lagi untuk melempar.
+      if (performance.now() - turun < 230) {
+        modeTap = true;
+        btn.lastElementChild!.textContent = "KETUK";
+        return;
+      }
+      lempar();
+    });
+    btn.addEventListener("pointercancel", () => {
+      aktif = false;
+      cancelAnimationFrame(gaugeRaf);
+      marker.style.display = "none";
+      zones.forEach((el) => el.classList.add("on"));
+    });
+    return panel;
+  }
+
+  // --- giliran selesai otomatis supaya permainan mengalir
+  let autoTimer: ReturnType<typeof setTimeout> | undefined;
+  let autoVer = -1;
+  let autoOff = -1;
+  let autoUntil = 0;
+  function stopAuto(): void {
+    autoOff = version;
+    clearTimeout(autoTimer);
+    bottom.querySelector(".autobar")?.remove();
+  }
+
   function renderBottom(): void {
     if (disposed) return;
+    clearTimeout(autoTimer);
+    tutupMeteran();
     const locked = sending || playing;
     const meP = state.players[me];
     const cur = state.players[state.order[state.turn]];
     let hint = "";
     const main: HTMLElement[] = [];
     const side: HTMLElement[] = [];
+    let meteran: HTMLElement | null = null;
     const sideBtn = (icon: string, label: string, sub: string, ok: boolean, why: string, fn: () => void) =>
       side.push(
         h(
           "button",
-          { class: `side${ok ? "" : " off"}`, disabled: locked, onclick: () => (ok ? fn() : toast(why)) },
+          {
+            class: `side${ok ? "" : " off"}`,
+            disabled: locked,
+            onclick: () => {
+              stopAuto();
+              ok ? fn() : toast(why);
+            },
+          },
           h("span", { class: "s-icon" }, icon),
           h("span", { class: "s-label" }, label),
           h("span", { class: "s-sub" }, sub),
@@ -825,30 +1024,76 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
       );
     } else {
       const rolling = state.phase === "awaiting_roll";
+      const jr = JURUS[meP.profession];
+      const jurusSiap = meP.jurus >= JURUS_PENUH;
+      const jurusBisa = jurusSiap && (meP.profession !== "ojol" || !rolling);
+      const bisaUpgrade = state.tiles.some((t, i) => t.owner === me && t.level < MAX_LEVEL && meP.cuan >= biayaUpgrade(i));
+      const punyaUsaha = state.tiles.some((t) => t.owner === me);
+      const bisaPetisi = coop && !state.aksiDipakai && meP.cuan >= PETISI_BIAYA;
+      const bisaLiputan = coop && !state.aksiDipakai && state.lumbung >= LIPUTAN_BIAYA_LUMBUNG;
       if (rolling) {
+        const bebas = !meP.skipNext && meP.jailTurns === 0;
         hint = meP.skipNext
           ? "Kamu harus melewatkan giliran ini."
           : meP.jailTurns > 0
             ? "Kamu ditilang. Lempar dadu kembar buat bebas, atau bayar denda."
-            : "Giliranmu! Lempar dadunya.";
+            : jurusBisa
+              ? `⚡ Jurus ${jr.nama} siap! Atau tahan dadu buat jalan.`
+              : "Giliranmu! Tahan tombol dadu, lepas di tenaga yang kamu mau.";
+        const btn = h(
+          "button",
+          { class: "dicebtn", disabled: locked },
+          h("span", { class: "d-icon" }, meP.skipNext ? "😵" : "🎲"),
+          h("span", {}, meP.skipNext ? "LEWATI" : bebas ? "TAHAN" : "LEMPAR"),
+        );
+        if (bebas && !locked) meteran = pasangMeteran(btn);
+        else btn.onclick = () => void send({ type: "roll" });
+        main.push(btn);
+        if (meP.jailTurns > 0) {
+          sideBtn("🧾", "Denda", drPendek(DENDA_TILANG), meP.cuan >= DENDA_TILANG, "Uangmu nggak cukup buat bayar denda.", () => void send({ type: "bayar_denda" }));
+        }
+      } else {
+        const adaAksi = jurusBisa || bisaUpgrade || bisaPetisi || bisaLiputan;
+        hint = jurusBisa
+          ? `⚡ Jurus ${jr.nama} siap: ${jr.efek}.`
+          : adaAksi
+            ? "Masih bisa upgrade atau melawan Rezim. Kalau tidak, giliran selesai sendiri."
+            : "Giliran selesai…";
+        const auto = autoOff !== version && !locked;
+        let sisa = 0;
+        if (auto) {
+          if (autoVer !== version) {
+            autoVer = version;
+            autoUntil = performance.now() + (adaAksi ? 5200 : 900) / speed;
+          }
+          sisa = Math.max(60, autoUntil - performance.now());
+          const at = version;
+          autoTimer = setTimeout(() => {
+            if (!disposed && version === at && autoOff !== at && myTurn() && state.phase === "awaiting_end") void send({ type: "end_turn" });
+          }, sisa);
+        }
         main.push(
           h(
             "button",
-            { class: "dicebtn", disabled: locked, onclick: () => void send({ type: "roll" }) },
-            h("span", { class: "d-icon" }, meP.skipNext ? "😵" : "🎲"),
-            h("span", {}, meP.skipNext ? "LEWATI" : "LEMPAR"),
+            { class: "btn big endbtn", disabled: locked, onclick: () => void send({ type: "end_turn" }) },
+            "Selesai ✅",
+            auto ? h("i", { class: "autobar", style: `animation-duration:${Math.round(sisa)}ms` }) : null,
           ),
         );
-        if (meP.jailTurns > 0) {
-          sideBtn("🧾", "Bayar denda", drPendek(DENDA_TILANG), meP.cuan >= DENDA_TILANG, "Uangmu nggak cukup buat bayar denda.", () => void send({ type: "bayar_denda" }));
-        }
-      } else {
-        hint = "Mau upgrade usaha atau melawan Rezim dulu? Kalau sudah, akhiri giliran.";
-        main.push(h("button", { class: "btn big", disabled: locked, onclick: () => void send({ type: "end_turn" }) }, "Selesai ✅"));
       }
-      const bisaUpgrade = state.tiles.some((t, i) => t.owner === me && t.level < MAX_LEVEL && meP.cuan >= biayaUpgrade(i));
-      const punyaUsaha = state.tiles.some((t) => t.owner === me);
+      sideBtn(
+        jr.emoji,
+        "Jurus",
+        jurusSiap ? "SIAP!" : `${meP.jurus}/${JURUS_PENUH}`,
+        jurusBisa,
+        jurusSiap
+          ? "Jalan Tikus dipakai setelah kamu melempar dadu."
+          : `${jr.nama}: ${jr.efek}. Terisi ${meP.jurus}/${JURUS_PENUH}, nambah 1 tiap giliranmu.`,
+        () => void send({ type: "jurus" }),
+      );
+      if (jurusBisa) side[side.length - 1].classList.add("glow");
       sideBtn("🏗️", "Upgrade", punyaUsaha ? "usaha" : "belum ada", punyaUsaha, "Kamu belum punya usaha. Beli dulu saat mendarat di petak kosong.", () => showUpgrade());
+      if (bisaUpgrade && !rolling) side[side.length - 1].classList.add("glow");
       if (coop) {
         sideBtn(
           "✍️",
@@ -869,11 +1114,10 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
           () => void send({ type: "liputan_media" }),
         );
       }
-      if (bisaUpgrade && !rolling) side[0].classList.add("glow");
     }
 
     bottom.replaceChildren(
-      h("div", { class: `hint${myTurn() && !locked ? " mine" : ""}` }, hint),
+      meteran ?? h("div", { class: `hint${myTurn() && !locked ? " mine" : ""}` }, hint),
       h("div", { class: "actions" }, h("div", { class: "side-row" }, ...side.slice(0, 2)), h("div", { class: "main-row" }, ...main), h("div", { class: "side-row" }, ...side.slice(2))),
     );
   }
@@ -881,6 +1125,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
   // ------------------------------------------------------------------ lembar info
 
   function sheet(...children: (Node | string | null)[]): () => void {
+    stopAuto();
     const close = modal(
       h("div", { class: "sheet col" }, ...children.filter((c): c is Node | string => !!c), h("button", { class: "btn grey", onclick: () => close() }, "Tutup")),
     );
@@ -1018,6 +1263,8 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
       h("div", { class: "sheet-title" }, `${PROFESSION_EMOJI[p.profession]} ${id === me ? "Kamu" : p.name}`),
       row("Profesi", PROFESSION_LABEL[p.profession]),
       h("div", { class: "muted" }, `Keahlian: ${PROFESSION_SKILL[p.profession]}`),
+      h("div", { class: "muted" }, `⚡ Jurus ${JURUS[p.profession].nama} (${p.jurus}/${JURUS_PENUH}): ${JURUS[p.profession].efek}.`),
+      coop ? row("Jasa melawan Rezim", `${p.jasa} poin`) : null,
       row("Uang", dr(p.cuan)),
       row("Total harta", dr(netWorth(state, p))),
       id === me && driver.role() === "buzzer" ? h("div", { class: "tag", style: "background:#3a3f4b" }, "🤫 Kamu Buzzer") : null,
@@ -1067,7 +1314,7 @@ export function startGame(driver: Driver, opts: { onExit: () => void; onReplay?:
     root.style.setProperty("--feed-top", `${top.offsetHeight + 6}px`);
     // Layar lebar (tablet/desktop): HUD menepi ke kiri, papan memakai seluruh tinggi layar.
     const lebar = innerWidth > innerHeight * 1.2;
-    scene.setInsets(lebar ? 0 : top.offsetHeight + 6, lebar ? 40 : 176);
+    scene.setInsets(lebar ? 0 : top.offsetHeight + 6, lebar ? 40 : 200);
   };
   updateTop();
   renderBottom();

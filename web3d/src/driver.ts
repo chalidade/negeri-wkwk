@@ -33,7 +33,7 @@ export interface Driver {
 
 // ------------------------------------------------------------------ solo
 
-const SOLO_KEY = "wkwk.solo.v2";
+const SOLO_KEY = "wkwk.solo.v3";
 interface SoloSave extends GameRow {
   roles: Record<string, Role>;
 }
@@ -42,7 +42,7 @@ function loadSolo(): SoloSave | null {
   try {
     const raw = localStorage.getItem(SOLO_KEY);
     const save = raw ? (JSON.parse(raw) as SoloSave) : null;
-    return save && save.state?.schema === 2 && save.state.phase !== "game_over" ? save : null;
+    return save && save.state?.schema === 3 && save.state.phase !== "game_over" ? save : null;
   } catch {
     return null;
   }
@@ -98,7 +98,7 @@ function soloDriver(save: SoloSave): Driver {
   };
 }
 
-export function newSoloGame(name: string, profession: Profession | null, mode: Mode, bots = 3): Driver {
+export function newSoloGame(name: string, profession: Profession | null, mode: Mode, bots = 3, level = 1): Driver {
   const mine = profession ?? PROFESSIONS[cryptoRng.int(0, PROFESSIONS.length - 1)];
   const others = shuffled(PROFESSIONS.filter((p) => p !== mine));
   const names = shuffled(BOT_NAMES);
@@ -112,7 +112,7 @@ export function newSoloGame(name: string, profession: Profession | null, mode: M
       bot: true,
     })),
   ];
-  const state = createInitialState("solo", mode, members, cryptoRng);
+  const state = createInitialState("solo", mode, members, cryptoRng, level);
   const roles: Record<string, Role> = {};
   for (const s of assignSecrets(mode, state.order, cryptoRng)) roles[s.userId] = s.userId === "kamu" ? "rakyat" : s.role;
   const save: SoloSave = { version: 1, state, roles };
@@ -129,7 +129,7 @@ export function resumeSoloGame(): Driver | null {
 
 export async function onlineGame(roomId: string): Promise<Driver | null> {
   const first = await getGame(roomId);
-  if (!first || first.state.schema !== 2) return null;
+  if (!first || first.state.schema !== 3) return null;
   const me = (await supabase.auth.getUser()).data.user?.id ?? "";
   const secret = await getSecret(roomId);
   let cur: GameRow = first;

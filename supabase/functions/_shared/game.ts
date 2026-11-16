@@ -13,7 +13,7 @@ export async function loadGame(admin: SupabaseClient, roomId: string): Promise<G
     await admin.from("game_states").select("version, state").eq("room_id", roomId).maybeSingle(),
   ) as GameRow | null;
   if (!row) throw new HttpError(404, "game_belum_mulai", "Permainan belum dimulai.");
-  if (row.state.schema !== 2) {
+  if (row.state.schema !== 3) {
     throw new HttpError(409, "game_lama", "Game ini dari versi lama. Bikin room baru ya.");
   }
   return row;

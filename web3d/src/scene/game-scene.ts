@@ -68,6 +68,8 @@ export class GameScene {
 
   private tiles: THREE.Mesh[] = [];
   private sideMats: THREE.MeshStandardMaterial[] = [];
+  private topMats: THREE.MeshStandardMaterial[] = [];
+  private lit: number[] = [];
   private buildings: (THREE.Group | null)[] = [];
   private tileKeys: string[] = [];
   private spinners: THREE.Object3D[] = [];
@@ -298,6 +300,7 @@ export class GameScene {
       this.scene.add(mesh);
       this.tiles.push(mesh);
       this.sideMats.push(side);
+      this.topMats.push(top);
       this.buildings.push(null);
       this.tileKeys.push("");
     }
@@ -739,6 +742,31 @@ export class GameScene {
   focusCar(): void {
     this.follow = this.car;
     this.goalDist = this.focusDist;
+  }
+
+  /** Sorot petak-petak yang mungkin diinjak (meteran dadu). Panggil tanpa isi untuk mematikan. */
+  highlight(groups: { tiles: number[]; color: string }[] = []): void {
+    for (const i of this.lit) {
+      this.topMats[i].emissive.set("#000000");
+      this.tiles[i].position.y = TOP / 2;
+    }
+    this.lit = [];
+    for (const g of groups) {
+      for (const i of g.tiles) {
+        this.topMats[i].emissive.set(g.color);
+        this.topMats[i].emissiveIntensity = 0.55;
+        this.tiles[i].position.y = TOP / 2 + 0.16;
+        this.lit.push(i);
+      }
+    }
+  }
+
+  /** Mundur sedikit dari pion supaya 12 petak di depannya kelihatan saat memilih tenaga dadu. */
+  planView(id: string): void {
+    const v = this.pawns.get(id);
+    if (!v) return;
+    this.follow = v.group;
+    this.goalDist = Math.min(this.overviewDist, this.focusDist * 1.5);
   }
 
   /** Tinggi HUD atas & bawah (px) supaya papan dipusatkan di area yang kosong. */

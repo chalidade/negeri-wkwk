@@ -44,13 +44,32 @@ export const KREATOR_PETISI = 1.8;
 export const JURNALIS_BONUS_LIPUTAN = 3;
 export const MAHASISWA_BONUS_DEMO = 2;
 
+// --- dadu kendali: pemain memilih tenaga lemparan
+export const GAYA_DADU: Record<string, [number, number]> = { pelan: [2, 5], sedang: [6, 8], kencang: [9, 12] };
+/** Peluang lemparan benar-benar jatuh di kisaran yang dipilih. */
+export const AKURASI_DADU = 0.75;
+
+// --- jurus profesi: terisi satu tiap giliran sendiri
+export const JURUS_PENUH = 4;
+export const JURUS_AWAL = 2;
+export const JURUS_SEMANGAT: Partial<Record<Profession, number>> = { buruh: 18, kreator: 12, mahasiswa: 22 };
+export const JURUS_UANG = 1_500_000;
+export const JURUS_DAMAGE = 7;
+
+// --- babak (tingkat kesulitan Rezim)
+export const MAX_BABAK = 10;
+/** Pengali nyawa Rezim per babak. */
+export const nyawaBabak = (level: number): number => 1 + 0.052 * (level - 1);
+/** Pengali pungutan Rezim per babak. */
+export const pungutanBabak = (level: number): number => 1 + 0.045 * (level - 1);
+
 export const LAMA_TILANG = 2;
 export const DENDA_TILANG = 800_000;
 export const MAX_DADU_KEMBAR = 3;
 
 // --- Rezim
 /** Nyawa Rezim tergantung jumlah warga: makin ramai, makin kuat Rezimnya. */
-export const KEKUASAAN_AWAL: Record<number, number> = { 2: 66, 3: 95, 4: 120, 5: 150, 6: 180 };
+export const KEKUASAAN_AWAL: Record<number, number> = { 2: 96, 3: 138, 4: 172, 5: 212, 6: 250 };
 /** Kekuasaan tinggal separuh: Rezim panik, semua pungutan dikali PANIK_PENGALI. */
 export const PANIK_DI = 0.5;
 export const PANIK_PENGALI = 1.5;
@@ -67,7 +86,7 @@ export const SEMANGAT_UPGRADE = 2;
 export const SEMANGAT_PUNGLI = 3;
 export const SEMANGAT_SEWA = 1;
 export const SEMANGAT_KEBIJAKAN = 3;
-export const SEMANGAT_TITIK_DEMO = 20;
+export const SEMANGAT_TITIK_DEMO = 14;
 export const SEMANGAT_PETISI = 10;
 export const PENALTI_BANGKRUT_SEMANGAT = 30;
 

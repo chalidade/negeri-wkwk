@@ -11,6 +11,14 @@ export interface Ctx {
   s: GameState;
   events: GameEvent[];
   rng: Rng;
+  /** pemain yang mendapat poin jasa dari efek yang sedang diproses (null = tidak ada) */
+  oleh: string | null;
+}
+
+/** Tambah poin jasa (penentu MVP) untuk seorang pemain. */
+export function jasa(ctx: Ctx, id: string | null, poin: number): void {
+  const p = id ? ctx.s.players[id] : undefined;
+  if (p && !p.bankrupt && poin > 0) p.jasa += Math.round(poin);
 }
 
 /** Pihak dalam transaksi: id pemain, bank, Rezim, atau Lumbung Bersama. */
@@ -22,7 +30,7 @@ export const coop = (s: GameState): boolean => s.mode === "rakyat_bersatu";
 
 /** Pengali pungutan Rezim: naik saat Rezim panik. */
 export function panik(s: GameState): number {
-  return coop(s) && s.kekuasaan <= batasPanik(s) ? R.PANIK_PENGALI : 1;
+  return (coop(s) && s.kekuasaan <= batasPanik(s) ? R.PANIK_PENGALI : 1) * R.pungutanBabak(s.level);
 }
 
 export function batasPanik(s: GameState): number {
@@ -173,6 +181,8 @@ export function hitRezim(ctx: Ctx, damage: number, alasan: string): void {
   const dari = s.kekuasaan;
   s.kekuasaan = Math.max(0, dari - Math.round(damage));
   emit(ctx, { type: "kekuasaan", payload: { dari, ke: s.kekuasaan, alasan } });
+  // Serangan langsung dihargai 3 poin jasa per Kekuasaan; pemantik Demo Akbar dapat bonus kecil.
+  jasa(ctx, ctx.oleh, alasan === "demo_akbar" ? 6 : (dari - s.kekuasaan) * 3);
   if (dari > batasPanik(s) && s.kekuasaan <= batasPanik(s) && s.kekuasaan > 0) {
     emit(ctx, { type: "rezim_panik", payload: {} });
   }
@@ -200,6 +210,7 @@ export function addSemangat(ctx: Ctx, delta: number, alasan: string, perGiliran 
   const dari = s.semangat;
   s.semangat = Math.max(0, Math.min(R.SEMANGAT_PENUH, dari + d));
   if (s.semangat === dari) return;
+  if (d > 0) jasa(ctx, ctx.oleh, d);
   emit(ctx, { type: "semangat", payload: { dari, ke: s.semangat, alasan } });
   if (s.semangat >= R.SEMANGAT_PENUH) {
     const mahasiswa = alivePlayers(s).filter((p) => p.profession === "mahasiswa").length;

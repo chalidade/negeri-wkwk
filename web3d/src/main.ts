@@ -10,11 +10,14 @@ import { startGame } from "./game.ts";
 import { getStats, showHelp } from "./help.ts";
 import { sfx } from "./sfx.ts";
 import {
+  BABAK,
+  JURUS,
   PROFESSIONS,
   PROFESSION_EMOJI,
   PROFESSION_LABEL,
   PROFESSION_SKILL,
   colorForSeat,
+  pangkat,
   type Mode,
   type Profession,
 } from "./shared.ts";
@@ -37,7 +40,7 @@ const savedProf = (): Profession | null => {
   return p && PROFESSIONS.includes(p) ? p : null;
 };
 
-function runGame(driver: Driver, onReplay?: () => void): void {
+function runGame(driver: Driver, onReplay?: (level: number) => void): void {
   cleanup?.();
   cleanup = startGame(driver, { onExit: () => homeScreen(), onReplay });
 }
@@ -76,7 +79,10 @@ function homeScreen(): void {
   );
   const paint = () => {
     profBtns.forEach((b, i) => b.classList.toggle("on", PROFESSIONS[i] === prof));
-    skill.textContent = `Keahlian: ${PROFESSION_SKILL[prof]}`;
+    skill.replaceChildren(
+      h("div", {}, `Keahlian: ${PROFESSION_SKILL[prof]}`),
+      h("div", {}, `⚡ Jurus ${JURUS[prof].nama}: ${JURUS[prof].efek}.`),
+    );
   };
   paint();
 
@@ -91,12 +97,37 @@ function homeScreen(): void {
     const n = needName();
     if (!n) return;
     sfx.click();
-    const again = () => runGame(newSoloGame(n, prof, "rakyat_bersatu"), again);
+    const again = (level: number) => runGame(newSoloGame(n, prof, "rakyat_bersatu", 3, level), again);
     const saved = resume ? resumeSoloGame() : null;
     if (saved) runGame(saved, again);
-    else again();
+    else again(babak);
   };
   const st = getStats();
+  const pk = pangkat(st.xp);
+
+  // Tangga babak: tiap menang, Rezim berikutnya terbuka.
+  let babak = st.babak;
+  const babakBox = h("div", { class: "babak-mid" });
+  const prev = h("button", { class: "icon", onclick: () => geser(-1) }, "◀");
+  const next = h("button", { class: "icon", onclick: () => geser(1) }, "▶");
+  const paintBabak = () => {
+    const b = BABAK[babak - 1];
+    const bintang = st.bintang[babak] ?? 0;
+    babakBox.replaceChildren(
+      h("div", { class: "babak-emoji" }, b.emoji),
+      h("label", {}, `Babak ${babak} dari ${BABAK.length}`),
+      h("div", { class: "babak-nama" }, b.nama),
+      h("div", { class: "stars mini" }, ...[1, 2, 3].map((i) => h("span", { class: i <= bintang ? "on" : "" }, "★"))),
+    );
+    prev.disabled = babak <= 1;
+    next.disabled = babak >= st.babak;
+  };
+  const geser = (d: number) => {
+    babak = Math.max(1, Math.min(st.babak, babak + d));
+    sfx.click();
+    paintBabak();
+  };
+  paintBabak();
 
   show(
     h(
@@ -106,9 +137,13 @@ function homeScreen(): void {
         "div",
         { class: "col" },
         logo(),
-        st.main > 0
-          ? h("div", { class: "statline" }, `🏆 Menang ${st.menang}/${st.main}  ·  🔥 Beruntun ${st.streak}${st.rekor ? `  ·  ⚡ Rekor ronde ${st.rekor}` : ""}`)
-          : null,
+        h(
+          "div",
+          { class: "statline" },
+          h("div", {}, `🎖️ ${pk.nama}  ·  🪙 ${st.emas} Emas Antum${st.streak > 1 ? `  ·  🔥 ${st.streak} beruntun` : ""}`),
+          h("div", { class: "xpbar thin" }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` })),
+        ),
+        h("div", { class: "panel babak" }, prev, babakBox, next),
         h(
           "div",
           { class: "panel col" },
@@ -119,7 +154,7 @@ function homeScreen(): void {
           skill,
         ),
         hasSoloSave() ? h("button", { class: "btn big green block", onclick: () => solo(true) }, "▶ Lanjutkan Permainan") : null,
-        h("button", { class: "btn big block", onclick: () => solo(false) }, hasSoloSave() ? "🎲 Main Solo Baru" : "🎲 MAIN SEKARANG"),
+        h("button", { class: "btn big block", onclick: () => solo(false) }, hasSoloSave() ? `🎲 Mulai Baru: Babak ${st.babak}` : "🎲 MAIN SEKARANG"),
         h("div", { class: "muted center" }, "Solo: kamu + 3 warga bot melawan Rezim. Langsung main, tanpa internet."),
         h(
           "div",

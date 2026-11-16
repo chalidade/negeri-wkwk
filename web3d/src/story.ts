@@ -1,5 +1,5 @@
 // Mengubah event dari engine menjadi kalimat untuk feed & riwayat.
-import { LEVEL_LABEL, TILES, dr, type GameEvent, type GameState } from "./shared.ts";
+import { JURUS, LEVEL_LABEL, TILES, dr, type GameEvent, type GameState } from "./shared.ts";
 
 const ALASAN_TILANG: Record<string, string> = {
   diciduk: "diciduk aparat",
@@ -59,6 +59,8 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
       return `🌾 ${who} menyumbang ${dr(p.jumlah)} ke Lumbung`;
     case "petisi":
       return `✍️ ${who} bikin petisi online`;
+    case "jurus":
+      return `⚡ ${who} pakai jurus ${JURUS[String(p.profesi)]?.nama ?? ""}!`;
     case "liputan_media":
       return `📰 ${who} mendanai Liputan Media: Kekuasaan −${p.damage}`;
     case "demo_akbar":

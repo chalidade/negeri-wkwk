@@ -37,7 +37,9 @@ const types = (r: { events: { type: string }[] }) => r.events.map((e) => e.type)
 describe("setup", () => {
   it("state awal: uang DR, papan 32 petak, nyawa Rezim sesuai jumlah pemain", () => {
     const s = setup(4);
-    assert.equal(s.schema, 2);
+    assert.equal(s.schema, 3);
+    assert.equal(s.level, 1);
+    assert.equal(s.players.andi.jurus, R.JURUS_AWAL);
     assert.equal(TILES.length, R.BOARD_SIZE);
     assert.equal(s.tiles.length, 32);
     assert.equal(s.players.andi.cuan, 20 * JT);
@@ -205,6 +207,51 @@ describe("melawan Rezim", () => {
   });
 });
 
+describe("dadu kendali, jurus, babak", () => {
+  it("tenaga lemparan: jitu jatuh di kisaran, meleset jadi acak", () => {
+    // urutan angka acak: undian akurasi, lalu dadu (diulang sampai masuk kisaran)
+    let r = act(setup(), "andi", { type: "roll", gaya: "kencang" }, [10, 1, 1, 6, 5]);
+    assert.deepEqual(r.events[0].payload, { dadu: [6, 5], gaya: "kencang", kena: true });
+    assert.equal(r.state.players.andi.position, 11);
+    r = act(setup(), "andi", { type: "roll", gaya: "kencang" }, [90, 1, 3]);
+    assert.deepEqual(r.events[0].payload, { dadu: [1, 3], gaya: "kencang", kena: false });
+  });
+
+  it("jurus terisi tiap giliran sendiri dan kosong setelah dipakai", () => {
+    let s = setup(2, "jurnalis");
+    assert.throws(() => act(s, "andi", { type: "jurus" }), (e: GameError) => e.code === "jurus_belum_siap");
+    s.players.andi.jurus = R.JURUS_PENUH;
+    const r = act(s, "andi", { type: "jurus" });
+    assert.equal(r.state.players.andi.jurus, 0);
+    assert.equal(r.state.kekuasaan, s.kekuasaanMaks - R.JURUS_DAMAGE);
+    assert.equal(r.state.players.andi.jasa, R.JURUS_DAMAGE * 3);
+    // giliran pindah ke budi: jurus budi bertambah satu
+    s = act(s, "andi", { type: "roll" }, [4, 4]).state;
+    s = act(s, "andi", { type: "roll" }, [4, 3]).state;
+    if (s.phase === "awaiting_buy") s = act(s, "andi", { type: "skip_buy" }).state;
+    s = act(s, "andi", { type: "end_turn" }).state;
+    assert.equal(s.players.budi.jurus, R.JURUS_AWAL + 1);
+  });
+
+  it("Jalan Tikus (ojol) memberi satu lemparan tambahan setelah jalan", () => {
+    const s = setup(2, "ojol");
+    s.players.andi.jurus = R.JURUS_PENUH;
+    assert.throws(() => act(s, "andi", { type: "jurus" }), (e: GameError) => e.code === "fase_salah");
+    s.phase = "awaiting_end";
+    assert.equal(act(s, "andi", { type: "jurus" }).state.phase, "awaiting_roll");
+  });
+
+  it("babak lebih tinggi: Rezim lebih tebal dan pungutannya lebih mahal", () => {
+    const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession }));
+    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 6);
+    assert.equal(s.level, 6);
+    assert.equal(s.kekuasaanMaks, Math.round(R.KEKUASAAN_AWAL[4] * R.nyawaBabak(6)));
+    s.players.andi.position = 3;
+    const r = act(s, "andi", { type: "roll" }, [1, 2]); // Potongan Gaji DR 1 jt
+    assert.equal(r.state.players.andi.cuan, 20 * JT - R.bulat(JT * R.pungutanBabak(6)));
+  });
+});
+
 describe("talangan & bangkrut", () => {
   it("Lumbung menalangi warga yang tidak sanggup bayar", () => {
     const s = setup();
@@ -289,12 +336,15 @@ describe("simulasi", () => {
       for (let step = 0; step < 4000 && s.phase !== "game_over"; step++) {
         const me = s.order[s.turn];
         const options: Action[] = [];
-        if (s.phase === "awaiting_roll") options.push({ type: "roll" });
+        if (s.phase === "awaiting_roll") {
+          options.push({ type: "roll" }, { type: "roll", gaya: (["pelan", "sedang", "kencang"] as const)[rng.int(0, 2)] });
+        }
         if (s.phase === "awaiting_buy") options.push({ type: "buy" }, { type: "skip_buy" });
         if (s.phase === "awaiting_end") options.push({ type: "end_turn" });
         if (s.phase === "awaiting_roll" || s.phase === "awaiting_end") {
           if (rng.int(0, 9) === 0) options.push({ type: "petisi" }, { type: "liputan_media" });
           if (rng.int(0, 9) === 0) options.push({ type: "donasi_lumbung", amount: 500_000 });
+          if (rng.int(0, 5) === 0) options.push({ type: "jurus" });
           const mine = s.tiles.findIndex((t) => t.owner === me && t.level < 3);
           if (mine >= 0 && rng.int(0, 3) === 0) options.push({ type: "upgrade", tile: mine });
         }
@@ -311,6 +361,7 @@ describe("simulasi", () => {
           assert.ok(pl.cuan >= 0, `uang minus: ${pl.cuan}`);
           assert.equal(pl.cuan % 1000, 0, `uang bukan kelipatan 1.000: ${pl.cuan}`);
           assert.ok(pl.position >= 0 && pl.position < R.BOARD_SIZE);
+          assert.ok(pl.jurus >= 0 && pl.jurus <= R.JURUS_PENUH && pl.jasa >= 0);
         }
         assert.ok(s.semangat >= 0 && s.semangat < R.SEMANGAT_PENUH);
         assert.ok(s.kekuasaan >= 0 && s.kekuasaan <= s.kekuasaanMaks);
@@ -321,7 +372,7 @@ describe("simulasi", () => {
     }
   });
 
-  it("400 game penuh bot: tidak pernah macet, menang-kalahnya seimbang", () => {
+  it("400 game penuh bot di babak 5: tidak pernah macet, menang-kalahnya seimbang", () => {
     const menang: Record<number, number> = {};
     const total: Record<number, number> = {};
     for (let g = 0; g < 400; g++) {
@@ -334,7 +385,7 @@ describe("simulasi", () => {
         profession: null,
         bot: true,
       }));
-      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng);
+      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng, 5);
       const roles = Object.fromEntries(assignSecrets(s.mode, s.order, rng).map((x) => [x.userId, x.role]));
       let perTurn = 0;
       let last = "";
@@ -352,7 +403,7 @@ describe("simulasi", () => {
     }
     for (const n of [2, 3, 4, 5, 6]) {
       const rate = (menang[n] ?? 0) / total[n];
-      assert.ok(rate > 0.3 && rate < 0.9, `${n} pemain: bot menang ${Math.round(rate * 100)}%`);
+      assert.ok(rate > 0.2 && rate < 0.9, `${n} pemain di babak 5: bot menang ${Math.round(rate * 100)}%`);
     }
   });
 });

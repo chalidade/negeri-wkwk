@@ -33,6 +33,7 @@ import {
   GameError,
   PROFESSIONS,
   type Action,
+  type Gaya,
   type GameEvent,
   type GameState,
   type MemberInput,
@@ -51,6 +52,7 @@ export function createInitialState(
   mode: Mode,
   members: MemberInput[],
   rng: Rng,
+  level = 1,
 ): GameState {
   if (members.length < 2 || members.length > 6) {
     throw new GameError("jumlah_pemain", "Butuh 2 sampai 6 pemain.");
@@ -68,6 +70,8 @@ export function createInitialState(
       jailTurns: 0,
       skipNext: false,
       bankrupt: false,
+      jurus: R.JURUS_AWAL,
+      jasa: 0,
       ...(m.bot ? { bot: true } : {}),
     };
   }
@@ -80,18 +84,21 @@ export function createInitialState(
     if (free) tiles[free.index].owner = m.id;
   }
 
+  const babak = Math.max(1, Math.min(R.MAX_BABAK, Math.round(level)));
+  const nyawa = Math.round(R.KEKUASAAN_AWAL[sorted.length] * R.nyawaBabak(babak));
   return {
-    schema: 2,
+    schema: 3,
     roomId,
     mode,
+    level: babak,
     round: 1,
     maxRounds: R.MAX_ROUNDS,
     order: sorted.map((m) => m.id),
     turn: 0,
     players,
     tiles,
-    kekuasaan: R.KEKUASAAN_AWAL[sorted.length],
-    kekuasaanMaks: R.KEKUASAAN_AWAL[sorted.length],
+    kekuasaan: nyawa,
+    kekuasaanMaks: nyawa,
     semangat: 0,
     demoCount: 0,
     lumbung: 0,
@@ -132,9 +139,9 @@ export interface ActionResult {
 
 export function applyAction(state: GameState, actorId: string, action: Action, rng: Rng): ActionResult {
   const s: GameState = structuredClone(state);
-  const ctx: Ctx = { s, events: [], rng };
+  const ctx: Ctx = { s, events: [], rng, oleh: actorId };
 
-  if (s.schema !== 2) throw new GameError("game_lama", "Game ini dari versi lama. Bikin room baru ya.");
+  if (s.schema !== 3) throw new GameError("game_lama", "Game ini dari versi lama. Bikin room baru ya.");
   if (isOver(s)) throw new GameError("game_selesai", "Permainan sudah selesai.");
   const actor = s.players[actorId];
   if (!actor) throw new GameError("bukan_pemain", "Kamu bukan pemain di room ini.");
@@ -144,7 +151,11 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
   switch (action.type) {
     case "roll":
       requirePhase(s, "awaiting_roll");
-      doRoll(ctx, actor);
+      doRoll(ctx, actor, action.gaya);
+      break;
+    case "jurus":
+      requirePhase(s, "awaiting_roll", "awaiting_end");
+      doJurus(ctx, actor);
       break;
     case "buy":
       requirePhase(s, "awaiting_buy");
@@ -200,7 +211,19 @@ function requirePhase(s: GameState, ...phases: GameState["phase"][]): void {
 // Dadu & gerak
 // ---------------------------------------------------------------------------
 
-function doRoll(ctx: Ctx, p: PlayerState): void {
+/** Lempar dua dadu. Dengan `gaya`, ada peluang AKURASI_DADU jumlahnya jatuh di kisaran yang dipilih. */
+function lemparDadu(ctx: Ctx, gaya: Gaya | undefined): { dice: [number, number]; kena: boolean } {
+  const acak = (): [number, number] => [ctx.rng.int(1, 6), ctx.rng.int(1, 6)];
+  const range = gaya ? R.GAYA_DADU[gaya] : undefined;
+  if (!range) return { dice: acak(), kena: false };
+  const jitu = ctx.rng.int(1, 100) <= R.AKURASI_DADU * 100;
+  let dice = acak();
+  const pas = () => dice[0] + dice[1] >= range[0] && dice[0] + dice[1] <= range[1];
+  for (let i = 0; jitu && !pas() && i < 40; i++) dice = acak();
+  return { dice, kena: pas() };
+}
+
+function doRoll(ctx: Ctx, p: PlayerState, gaya?: Gaya): void {
   const s = ctx.s;
 
   if (p.skipNext) {
@@ -210,10 +233,12 @@ function doRoll(ctx: Ctx, p: PlayerState): void {
     return;
   }
 
-  const dice: [number, number] = [ctx.rng.int(1, 6), ctx.rng.int(1, 6)];
+  // Saat ditilang tenaga lemparan tidak berpengaruh: murni untung-untungan cari dadu kembar.
+  const pakai = p.jailTurns > 0 || !gaya || !R.GAYA_DADU[gaya] ? undefined : gaya;
+  const { dice, kena } = lemparDadu(ctx, pakai);
   const isDouble = dice[0] === dice[1];
   s.lastDice = dice;
-  emit(ctx, { type: "dadu", actor: p.id, payload: { dadu: dice } });
+  emit(ctx, { type: "dadu", actor: p.id, payload: { dadu: dice, gaya: pakai ?? null, kena } });
 
   if (p.jailTurns > 0) {
     if (!isDouble) {
@@ -457,6 +482,40 @@ function doPetisi(ctx: Ctx, p: PlayerState): void {
   addSemangat(ctx, gain, "petisi", true);
 }
 
+/** Jurus pamungkas profesi. Terisi satu tiap giliran sendiri. */
+function doJurus(ctx: Ctx, p: PlayerState): void {
+  const s = ctx.s;
+  if (p.jurus < R.JURUS_PENUH) throw new GameError("jurus_belum_siap", "Jurusmu belum terisi penuh.");
+  if (p.profession === "ojol" && s.phase !== "awaiting_end") {
+    throw new GameError("fase_salah", "Jalan Tikus dipakai setelah kamu melempar dadu.");
+  }
+  p.jurus = 0;
+  emit(ctx, { type: "jurus", actor: p.id, payload: { profesi: p.profession } });
+  const semangat = R.JURUS_SEMANGAT[p.profession];
+  switch (p.profession) {
+    case "pedagang": {
+      // Cuci Gudang: omzet semua usaha cair sekarang juga.
+      let omzet = 0;
+      s.tiles.forEach((t, i) => {
+        if (t.owner === p.id) omzet += omzetUsaha(s, i);
+      });
+      transfer(ctx, BANK, p.id, Math.max(R.JURUS_UANG, omzet * 2));
+      break;
+    }
+    case "ojol":
+      // Jalan Tikus: boleh melempar dadu sekali lagi.
+      s.phase = "awaiting_roll";
+      break;
+    case "jurnalis":
+      if (coop(s)) hitRezim(ctx, R.JURUS_DAMAGE, "bongkar_skandal");
+      else transfer(ctx, BANK, p.id, R.JURUS_UANG);
+      break;
+    default:
+      if (p.profession === "kreator" || !coop(s)) transfer(ctx, BANK, p.id, R.JURUS_UANG);
+      if (coop(s) && semangat) addSemangat(ctx, semangat, "jurus");
+  }
+}
+
 function doLiputan(ctx: Ctx, p: PlayerState): void {
   requireAksi(ctx);
   if (ctx.s.lumbung < R.LIPUTAN_BIAYA_LUMBUNG) {
@@ -493,6 +552,9 @@ function advanceTurn(ctx: Ctx): void {
   }
   s.turn = next;
   s.phase = "awaiting_roll";
+  ctx.oleh = s.order[next];
+  const giliran = s.players[s.order[next]];
+  giliran.jurus = Math.min(R.JURUS_PENUH, giliran.jurus + 1);
   emit(ctx, { type: "giliran", actor: s.order[next], payload: { ronde: s.round } });
 }
 
@@ -517,6 +579,8 @@ function endRound(ctx: Ctx): void {
 /** Giliran Rezim tiap akhir ronde: satu Kebijakan, lalu mobil pejabat jalan. */
 function rezimTurn(ctx: Ctx): void {
   const s = ctx.s;
+  // Efek giliran Rezim bukan jasa siapa pun, kecuali pemilik usaha yang didatangi pejabat.
+  ctx.oleh = null;
 
   const card = pickRandom(ctx.rng, KEBIJAKAN);
   emit(ctx, {
@@ -549,7 +613,9 @@ function rezimTurn(ctx: Ctx): void {
     const jumlah = transfer(ctx, BANK, tile.owner, sewaUsaha(s, ke));
     const damage = R.REZIM_KENA[tile.level];
     emit(ctx, { type: "rezim_bayar", payload: { tile: ke, ke: tile.owner, jumlah, damage } });
+    ctx.oleh = tile.owner;
     hitRezim(ctx, damage, "rezim_mampir");
+    ctx.oleh = null;
   }
 }
 

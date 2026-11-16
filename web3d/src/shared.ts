@@ -1,6 +1,6 @@
 // Aturan, tipe, dan data papan dipakai bersama dengan server (satu sumber kebenaran).
 export * from "../../supabase/functions/_shared/engine/mod.ts";
-import type { GameState, PlayerState } from "../../supabase/functions/_shared/engine/mod.ts";
+import type { Gaya, GameState, PlayerState } from "../../supabase/functions/_shared/engine/mod.ts";
 
 export const PROFESSION_LABEL: Record<string, string> = {
   buruh: "Buruh Pabrik",
@@ -86,4 +86,56 @@ export const dr = (n: number): string => `DR ${drPendek(n)}`;
 
 export function playersInOrder(state: GameState): PlayerState[] {
   return state.order.map((id) => state.players[id]);
+}
+
+/** Jurus pamungkas tiap profesi (efeknya dihitung di engine). */
+export const JURUS: Record<string, { nama: string; efek: string; emoji: string }> = {
+  buruh: { nama: "Mogok Massal", efek: "Semangat Demo +18", emoji: "🪧" },
+  pedagang: { nama: "Cuci Gudang", efek: "Omzet semua usahamu cair sekarang dua kali lipat, minimal DR 1,5 jt", emoji: "🛍️" },
+  ojol: { nama: "Jalan Tikus", efek: "Lempar dadu sekali lagi", emoji: "🛵" },
+  kreator: { nama: "Konten Viral", efek: "Dapat DR 1,5 jt dan Semangat Demo +12", emoji: "📱" },
+  jurnalis: { nama: "Bongkar Skandal", efek: "Kekuasaan Rezim −7", emoji: "📰" },
+  mahasiswa: { nama: "Orasi Akbar", efek: "Semangat Demo +22", emoji: "📣" },
+};
+
+/** Tenaga lemparan dadu, urut dari kiri ke kanan di meteran. */
+export const GAYA: { id: Gaya; label: string; kisaran: [number, number]; warna: string }[] = [
+  { id: "pelan", label: "PELAN", kisaran: [2, 5], warna: "#22c06b" },
+  { id: "sedang", label: "SEDANG", kisaran: [6, 8], warna: "#ffa51f" },
+  { id: "kencang", label: "KENCANG", kisaran: [9, 12], warna: "#f04457" },
+];
+
+/** Rezim tiap babak: makin tinggi makin tebal nyawanya dan makin rakus. */
+export const BABAK: { nama: string; emoji: string }[] = [
+  { nama: "Lurah Tukang Pungli", emoji: "🧾" },
+  { nama: "Camat Hobi Proyek", emoji: "🚧" },
+  { nama: "Bupati Dinasti", emoji: "👨‍👩‍👦" },
+  { nama: "Wali Kota Pencitraan", emoji: "📸" },
+  { nama: "Gubernur Baliho", emoji: "🪧" },
+  { nama: "Menteri Rangkap Jabatan", emoji: "🪑" },
+  { nama: "Ketua Partai Abadi", emoji: "🎩" },
+  { nama: "Jenderal Bisnis", emoji: "🎖️" },
+  { nama: "Oligark Tambang", emoji: "⛏️" },
+  { nama: "Presiden Tiga Periode", emoji: "👑" },
+];
+
+const PANGKAT: [number, string][] = [
+  [0, "Warga Biasa"],
+  [120, "Warga Kritis"],
+  [350, "Aktivis Kampung"],
+  [800, "Koordinator Lapangan"],
+  [1600, "Tokoh Rakyat"],
+  [3000, "Legenda Reformasi"],
+];
+
+/** Pangkat warga dari total XP, plus kemajuan menuju pangkat berikutnya (0..1). */
+export function pangkat(xp: number): { nama: string; maju: number; berikut: string | null } {
+  let i = 0;
+  while (i + 1 < PANGKAT.length && xp >= PANGKAT[i + 1][0]) i++;
+  const next = PANGKAT[i + 1];
+  return {
+    nama: PANGKAT[i][1],
+    maju: next ? (xp - PANGKAT[i][0]) / (next[0] - PANGKAT[i][0]) : 1,
+    berikut: next ? next[1] : null,
+  };
 }

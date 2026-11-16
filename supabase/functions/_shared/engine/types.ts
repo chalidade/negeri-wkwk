@@ -51,6 +51,10 @@ export interface PlayerState {
   jailTurns: number;
   skipNext: boolean;
   bankrupt: boolean;
+  /** isi tenaga jurus profesi: 0 sampai JURUS_PENUH */
+  jurus: number;
+  /** poin jasa melawan Rezim, penentu MVP */
+  jasa: number;
   /** true kalau pemain ini dijalankan komputer */
   bot?: boolean;
 }
@@ -70,9 +74,11 @@ export type GameResult =
   | { kind: "juragan_menang"; winner: string };
 
 export interface GameState {
-  schema: 2;
+  schema: 3;
   roomId: string;
   mode: Mode;
+  /** babak / tingkat kesulitan Rezim, mulai dari 1 */
+  level: number;
   round: number;
   maxRounds: number;
   /** urutan id pemain berdasarkan kursi */
@@ -105,8 +111,12 @@ export interface GameState {
   lastEvents: GameEvent[];
 }
 
+/** Tenaga lemparan dadu: menentukan kisaran jumlah mata dadu. */
+export type Gaya = "pelan" | "sedang" | "kencang";
+
 export type Action =
-  | { type: "roll" }
+  | { type: "roll"; gaya?: Gaya }
+  | { type: "jurus" }
   | { type: "buy" }
   | { type: "skip_buy" }
   | { type: "upgrade"; tile: number }
