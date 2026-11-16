@@ -18,6 +18,8 @@ class LobbyScreen extends StatefulWidget {
 
 class _LobbyScreenState extends State<LobbyScreen> {
   final _api = GameApi.instance;
+  late final Future<Map<String, dynamic>> _room = _api.fetchRoom(widget.roomId);
+  late final Stream<List<Map<String, dynamic>>> _members = _api.watchMembers(widget.roomId);
   StreamSubscription<GameState?>? _gameSub;
   bool _starting = false;
   bool _navigated = false;
@@ -60,9 +62,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Lobby')),
-      body: StreamBuilder<Map<String, dynamic>?>(
-        stream: _api.watchRoom(widget.roomId),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _room,
         builder: (context, roomSnap) {
+          if (roomSnap.hasError) {
+            return Center(child: Text('Gagal memuat room: ${roomSnap.error}'));
+          }
           final room = roomSnap.data;
           if (room == null) return const Center(child: CircularProgressIndicator());
           final code = room['code'] as String;
@@ -71,8 +76,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
           final isRakyat = room['mode'] == 'rakyat_bersatu';
 
           return StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _api.watchMembers(widget.roomId),
+            stream: _members,
             builder: (context, snap) {
+              if (snap.hasError) {
+                return Center(child: Text('Koneksi realtime bermasalah: ${snap.error}'));
+              }
               final members = snap.data ?? const [];
               return ListView(
                 padding: const EdgeInsets.all(20),

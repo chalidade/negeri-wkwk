@@ -25,6 +25,16 @@ class NegeriWkwkApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFC62828)),
         useMaterial3: true,
       ),
+      // Di web/tablet, tampilkan selebar HP supaya papan tidak kebesaran.
+      builder: (context, child) => ColoredBox(
+        color: const Color(0xFFEFE7E1),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: child,
+          ),
+        ),
+      ),
       home: isConfigured ? const AuthGate() : const _MissingConfig(),
     );
   }

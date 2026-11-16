@@ -137,6 +137,12 @@ class _GameScreenState extends State<GameScreen> {
         return StreamBuilder<GameState?>(
           stream: _game,
           builder: (context, gameSnap) {
+            if (gameSnap.hasError) {
+              return Scaffold(
+                appBar: AppBar(),
+                body: Center(child: Text('Koneksi realtime bermasalah: ${gameSnap.error}')),
+              );
+            }
             final game = gameSnap.data;
             if (board == null || game == null) {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));

@@ -79,11 +79,11 @@ class GameApi {
       .eq('room_id', roomId)
       .order('seat', ascending: true);
 
-  Stream<Map<String, dynamic>?> watchRoom(String roomId) => _client
+  Future<Map<String, dynamic>> fetchRoom(String roomId) => _client
       .from('rooms')
-      .stream(primaryKey: ['id'])
+      .select('id, code, host_id, mode, max_players, status')
       .eq('id', roomId)
-      .map((rows) => rows.isEmpty ? null : rows.first);
+      .single();
 
   Stream<GameState?> watchGame(String roomId) => _client
       .from('game_states')
