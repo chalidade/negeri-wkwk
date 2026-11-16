@@ -66,8 +66,12 @@ export const pungutanBabak = (level: number): number => 1 + 0.045 * (level - 1);
 // --- buzzer: warga yang diam-diam dibayar Rezim
 export const SABOTASE_SEMANGAT = 10;
 export const SABOTASE_LUMBUNG = 0.3;
-/** Peluang tiap sabotase meninggalkan jejak yang membersihkan satu warga. */
+/** Peluang tiap sabotase meninggalkan jejak digital. */
 export const PELUANG_JEJAK = 0.6;
+/** Peluang jejak itu benar mengarah ke buzzer. Sisanya jejak palsu yang memfitnah warga lain. */
+export const JEJAK_JUJUR = 0.55;
+/** Peluang per ronde Rezim berhasil menyuap seorang warga (mulai ronde 2). */
+export const PELUANG_REKRUT = 0.28;
 export const BONGKAR_DAMAGE = 12;
 export const BONGKAR_SEMANGAT = 20;
 export const FITNAH_DENDA = 1_500_000;

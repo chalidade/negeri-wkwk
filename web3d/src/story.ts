@@ -93,7 +93,7 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
     case "sabotase":
       return "🕵️ Ada buzzer beraksi!";
     case "jejak":
-      return `🔎 Jejak digital: buzzernya bukan ${name(p.bukan)}`;
+      return `🔎 Jejak digital mengarah ke ${name(p.ke)}`;
     case "buzzer_terbongkar":
       return `🕵️ ${name(p.target)} terbongkar sebagai buzzer!`;
     case "tuduh_salah":

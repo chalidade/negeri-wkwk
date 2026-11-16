@@ -287,14 +287,30 @@ describe("Dadu Nasib & buzzer", () => {
     t.semangat = 50;
     t.turn = 3;
     t.phase = "awaiting_end";
-    // pilih "tagar", jejak muncul (10 <= 60), yang dibersihkan: calon pertama, kebijakan ke-4, dadu Rezim 1+1
-    const r = act(t, "dewi", { type: "end_turn" }, [0, 10, 0, 4, 1, 1]);
+    // pilih "tagar", jejak muncul (10 <= 60), jejaknya jujur (20 <= 55), kebijakan ke-4, dadu Rezim 1+1
+    const r = act(t, "dewi", { type: "end_turn" }, [0, 10, 20, 4, 1, 1]);
     assert.ok(types(r).includes("sabotase"));
-    assert.ok(types(r).includes("jejak"));
-    assert.equal(r.state.bersih.length, 1);
-    assert.notEqual(r.state.bersih[0], "budi");
+    assert.deepEqual(r.state.jejak, { budi: 1 });
     assert.equal(r.state.semangat, 50 - R.SABOTASE_SEMANGAT - 10);
+    // jejak palsu (90 > 55) memfitnah warga lain: yang pertama di daftar adalah andi
+    const palsu = act(t, "dewi", { type: "end_turn" }, [0, 10, 90, 0, 4, 1, 1]);
+    assert.deepEqual(palsu.state.jejak, { andi: 1 });
     assert.ok(r.events.every((e) => e.actor !== "budi" || e.type === "giliran"));
+  });
+
+  it("Rezim menyuap bot yang paling kepepet di tengah permainan", () => {
+    const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession, bot: i > 0 }));
+    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, null, true);
+    assert.equal(s.rahasia.buzzer, null);
+    s.round = 3;
+    s.turn = 3;
+    s.phase = "awaiting_end";
+    s.players.citra.cuan = 1 * JT; // paling miskin, bobot terbesar
+    // suap berhasil (5 <= 28), undian bobot 1 -> yang termiskin; kebijakan ke-4, dadu Rezim 1+1
+    const r = act(s, "dewi", { type: "end_turn" }, [5, 1, 4, 1, 1]);
+    assert.equal(r.state.rahasia.buzzer, "citra");
+    assert.equal(r.state.rahasia.rekrut, false);
+    assert.ok(!types(r).includes("sabotase"));
   });
 
   it("menuduh: benar membongkar buzzer, salah kena denda, cuma satu kesempatan", () => {
@@ -394,7 +410,7 @@ describe("simulasi", () => {
         seat: i,
         profession: pros[(g + i) % pros.length],
       }));
-      let s = createInitialState(`room-${g}`, mode, members, rng, 1 + (g % 10), g % 2 ? `p${g % n}` : null);
+      let s = createInitialState(`room-${g}`, mode, members, rng, 1 + (g % 10), g % 2 ? `p${g % n}` : null, g % 4 === 0);
       for (let step = 0; step < 4000 && s.phase !== "game_over"; step++) {
         const me = s.order[s.turn];
         const options: Action[] = [];
@@ -448,7 +464,7 @@ describe("simulasi", () => {
         profession: null,
         bot: true,
       }));
-      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng, 3, g % 3 ? `b${1 + (g % (n - 1))}` : null);
+      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng, 3, null, g % 5 !== 0);
       const roles = Object.fromEntries(assignSecrets(s.mode, s.order, rng).map((x) => [x.userId, x.role]));
       let perTurn = 0;
       let last = "";

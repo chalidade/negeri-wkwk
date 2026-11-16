@@ -344,3 +344,9 @@ label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color
 .k-text { font-size: 13.5px; }
 .dice.ontop { z-index: 60; top: 46%; filter: drop-shadow(0 8px 14px rgba(0,0,0,.45)); }
 .dice.ontop .dice-total { font-size: 28px; }
+
+.pchip.bersih::before, .pchip.buzzer::before { content: none; }
+.pbadge { position: absolute; right: -4px; top: -9px; font-size: 10.5px; font-family: var(--display); background: #fff; border-radius: 999px; padding: 0 4px; box-shadow: 0 2px 0 rgba(20,60,110,.25); color: var(--ink); }
+.pbadge:empty { display: none; }
+.players { padding-top: 10px; margin-top: -7px; }
+.pbadge { font-size: 11px; top: -8px; right: -2px; }

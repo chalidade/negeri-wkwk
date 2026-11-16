@@ -75,9 +75,11 @@ export function pilihGaya(s: GameState, id: string, reserve = 2_500_000): Gaya {
  */
 export function decideBotAction(s: GameState, botId: string, role: PlayerSecret["role"] = "rakyat"): Action {
   const p = s.players[botId];
-  // Buzzer yang belum terbongkar pura-pura jadi warga biasa, tapi tidak pernah ikut melawan.
+  // Buzzer yang belum terbongkar menyamar: masih pakai jurus dan sesekali ikut petisi,
+  // tapi tidak pernah mendanai liputan dan tiap ronde menyabotase diam-diam.
   const buzzer = coop(s) && !p.buzzer && (s.rahasia.buzzer === botId || role === "buzzer");
   const kawan = coop(s) && !buzzer;
+  const purapura = buzzer && (s.round + p.seat) % 2 === 0;
   // Cadangan supaya tidak bangkrut kena pungli/kebijakan.
   const reserve = 2_500_000 * panik(s);
 
@@ -92,15 +94,8 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
     return { type: "sabotase" };
   }
 
-  // Warga jujur menuduh begitu tersisa satu tersangka (dan memberi pemain manusia waktu duluan).
-  if (kawan && !p.sudahTuduh && s.round >= 12) {
-    const tersangka = s.order.filter((id) => id !== botId && !s.players[id].bankrupt && !s.bersih.includes(id));
-    const sudahAda = s.order.some((id) => s.players[id].buzzer);
-    if (tersangka.length === 1 && s.bersih.length > 0 && !sudahAda) return { type: "tuduh", target: tersangka[0] };
-  }
-
   // 0. Jurus profesi begitu terisi. Jalan Tikus (ojol) hanya bisa setelah melempar.
-  if (!buzzer && p.jurus >= R.JURUS_PENUH && (p.profession !== "ojol" || s.phase === "awaiting_end")) {
+  if (p.jurus >= R.JURUS_PENUH && (p.profession !== "ojol" || s.phase === "awaiting_end")) {
     return { type: "jurus" };
   }
 
@@ -111,6 +106,7 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
     if (s.lumbung >= R.LIPUTAN_BIAYA_LUMBUNG + sisa) return { type: "liputan_media" };
     if (p.cuan - R.PETISI_BIAYA >= reserve * 2.5) return { type: "petisi" };
   }
+  if (purapura && !s.aksiDipakai && p.cuan - R.PETISI_BIAYA >= reserve * 2.5) return { type: "petisi" };
 
   if (s.phase === "awaiting_roll") {
     // 2. Kena tilang dan punya uang: bayar denda biar bisa jalan.

@@ -32,7 +32,7 @@ export interface Driver {
 
 // ------------------------------------------------------------------ solo
 
-const SOLO_KEY = "wkwk.solo.v4";
+const SOLO_KEY = "wkwk.solo.v5";
 interface SoloSave extends GameRow {
   roles: Record<string, Role>;
 }
@@ -41,7 +41,7 @@ function loadSolo(): SoloSave | null {
   try {
     const raw = localStorage.getItem(SOLO_KEY);
     const save = raw ? (JSON.parse(raw) as SoloSave) : null;
-    return save && save.state?.schema === 3 && save.state.rahasia && save.state.phase !== "game_over" ? save : null;
+    return save && save.state?.schema === 3 && save.state.jejak && save.state.rahasia && save.state.phase !== "game_over" ? save : null;
   } catch {
     return null;
   }
@@ -111,9 +111,10 @@ export function newSoloGame(name: string, profession: Profession | null, mode: M
       bot: true,
     })),
   ];
-  // Di 7 dari 10 permainan, satu warga bot diam-diam jadi buzzer Rezim.
-  const buzzer = mode === "rakyat_bersatu" && bots > 0 && cryptoRng.int(1, 10) <= 7 ? `bot${cryptoRng.int(1, bots)}` : null;
-  const state = createInitialState("solo", mode, members, cryptoRng, level, buzzer);
+  // Di 8 dari 10 permainan, Rezim berusaha menyuap seorang warga bot di tengah jalan.
+  // Siapa dan kapan ditentukan engine, jadi tidak ada yang tahu dari awal.
+  const rekrut = mode === "rakyat_bersatu" && bots > 0 && cryptoRng.int(1, 10) <= 8;
+  const state = createInitialState("solo", mode, members, cryptoRng, level, null, rekrut);
   const roles: Record<string, Role> = {};
   for (const id of state.order) roles[id] = "rakyat";
   const save: SoloSave = { version: 1, state, roles };

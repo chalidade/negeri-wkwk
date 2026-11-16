@@ -17,7 +17,7 @@ Main di browser: https://negeri-wkwk.vercel.app
 - **Babak:** di mode solo, tiap menang Rezim berikutnya terbuka (10 babak, makin tebal dan makin rakus). Tiap game memberi bintang, XP pangkat, dan Emas Antum.
 - **MVP:** jasa tiap warga melawan Rezim dihitung; yang terbanyak dapat mahkota.
 - **Dadu Nasib:** sebagian kartu dan bencana ditentukan lemparan dadu. 2–5 mujur, 6–8 lumayan, 9–12 apes.
-- **Buzzer:** di mode solo, sering ada satu warga bot yang diam-diam dibayar Rezim. Dia tidak ikut melawan dan menyabotase tiap ronde tanpa nama. Jejak membersihkan warga lain satu per satu; tiap pemain punya satu kesempatan menuduh.
+- **Buzzer:** di mode solo, Rezim bisa menyuap seorang warga bot di tengah permainan (yang paling kepepet paling mungkin). Buzzer menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia tapi bisa dipalsukan untuk memfitnah warga lain. Tiap pemain punya satu kesempatan menuduh.
 
 Mode kedua, **Juragan**, bersaing jadi yang paling tajir; Rezim tetap mengganggu.
 

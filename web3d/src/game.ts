@@ -113,19 +113,21 @@ export function startGame(
       smBar,
     ),
   );
-  const chipEls = new Map<string, { el: HTMLElement; money: HTMLElement }>();
+  const chipEls = new Map<string, { el: HTMLElement; money: HTMLElement; badge: HTMLElement }>();
   const players = h(
     "div",
     { class: "players" },
     ...playersInOrder(state).map((p) => {
       const money = h("div", { class: "money" });
+      const badge = h("span", { class: "pbadge" });
       const el = h(
         "div",
         { class: "pchip", onclick: () => showPlayer(p.id) },
+        badge,
         h("div", { class: "ava", style: `background:${colorForSeat(p.seat)}` }, PROFESSION_EMOJI[p.profession] ?? "🙂"),
         h("div", { class: "pinfo" }, h("div", { class: "pname" }, p.id === me ? "Kamu" : p.bot ? (p.name.split(" ").pop() ?? p.name) : p.name.split(" ")[0]), money),
       );
-      chipEls.set(p.id, { el, money });
+      chipEls.set(p.id, { el, money, badge });
       return el;
     }),
   );
@@ -170,8 +172,9 @@ export function startGame(
       c.el.classList.toggle("active", state.phase !== "game_over" && state.order[state.turn] === p.id);
       c.el.classList.toggle("dead", p.bankrupt);
       c.el.classList.toggle("mvp", coop && p.jasa > 0 && p.jasa === jasaMaks);
-      c.el.classList.toggle("bersih", state.bersih.includes(p.id) && p.id !== me);
       c.el.classList.toggle("buzzer", !!p.buzzer);
+      const n = state.jejak[p.id] ?? 0;
+      c.badge.textContent = p.buzzer ? "🕵️" : state.bersih.includes(p.id) ? "✅" : n > 0 && p.id !== me ? `🔎${n}` : "";
     }
   }
 
@@ -598,11 +601,11 @@ export function startGame(
           break;
         }
         case "jejak":
-          sfx.good();
-          state = { ...state, bersih: [...state.bersih, String(p.bukan)] };
+          sfx.click();
+          state = { ...state, jejak: { ...state.jejak, [String(p.ke)]: Number(p.total) } };
           updateTop();
-          say(line!, "good");
-          await banner("info", "🔎 JEJAK DIGITAL", `Buzzernya bukan ${nm(String(p.bukan))}`, 1700);
+          say(line!);
+          await banner("info", "🔎 JEJAK DIGITAL", `Mengarah ke ${String(p.ke) === me ? "kamu (jelas palsu!)" : nm(String(p.ke))}. Bisa asli, bisa fitnah.`, 2000);
           break;
         case "buzzer_terbongkar":
           sfx.fanfare();
@@ -1362,7 +1365,11 @@ export function startGame(
         ? h(
             "div",
             { class: "tag", style: `background:${p.buzzer ? "var(--red)" : state.bersih.includes(id) ? "var(--green)" : "#8a97ad"}` },
-            p.buzzer ? "🕵️ Buzzer (terbongkar)" : state.bersih.includes(id) ? "✅ Terbukti bukan buzzer" : "❓ Belum jelas",
+            p.buzzer
+              ? "🕵️ Buzzer (terbongkar)"
+              : state.bersih.includes(id)
+                ? "✅ Bukan buzzer (pernah salah dituduh)"
+                : `🔎 Jejak mengarah ke dia: ${state.jejak[id] ?? 0} kali`,
           )
         : null,
       coop && id !== me && !p.buzzer && !p.bankrupt && !state.bersih.includes(id) && state.players[me] && !state.players[me].sudahTuduh
@@ -1402,7 +1409,7 @@ export function startGame(
       state.kekuasaan <= batasPanik(state)
         ? h("div", { class: "tag", style: "background:var(--red)" }, "Rezim panik: semua pungutan 1,5x")
         : h("div", { class: "muted" }, "Kalau Kekuasaan tinggal separuh, Rezim panik dan semua pungutan jadi 1,5x."),
-      h("div", { class: "muted" }, "🕵️ Hati-hati buzzer: bisa jadi ada warga yang diam-diam dibayar Rezim. Dia tidak pernah ikut melawan, dan tiap ronde menyabotase. Ketuk warga yang kamu curigai untuk menuduh."),
+      h("div", { class: "muted" }, "🕵️ Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer menyabotase tiap ronde tanpa nama. Jejak digital (🔎) sering mengarah ke dia, tapi kadang dipalsukan buat memfitnah. Ketuk warga yang kamu curigai untuk menuduh."),
     );
   }
 
@@ -1413,6 +1420,7 @@ export function startGame(
         "div",
         { class: "sheet col" },
         h("div", { class: "sheet-title" }, `🕵️ Tuduh ${p.name} buzzer?`),
+        h("div", { class: "muted" }, `Jejak yang mengarah ke dia: ${state.jejak[id] ?? 0} kali. Ingat, jejak bisa dipalsukan, dan bisa saja belum ada buzzer sama sekali.`),
         h("div", { class: "muted" }, "Benar: buzzer terbongkar, Kekuasaan −12 dan Semangat +20. Salah: kamu didenda DR 1,5 jt dan Semangat −12. Kamu cuma punya satu kesempatan per permainan."),
         h(
           "div",
@@ -1474,7 +1482,7 @@ export function startGame(
   const unsub = driver.subscribe(enqueue);
   scene.focusPawn(state.order[state.turn]);
   if (coop && version === 1) {
-    setTimeout(() => !disposed && void banner("info", "🕵️ AWAS BUZZER", "Kabarnya ada warga yang diam-diam dibayar Rezim", 2600), 900);
+    setTimeout(() => !disposed && void banner("info", "🕵️ AWAS BUZZER", "Rezim bisa menyuap warga yang kepepet kapan saja", 2600), 900);
   }
   if (state.phase === "game_over") void showGameOver();
   else if (!localStorage.getItem(HELP_SEEN)) showHelp(() => afterIdle());

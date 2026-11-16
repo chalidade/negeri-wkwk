@@ -10,7 +10,7 @@ const SLIDES: [string, string, string][] = [
   ["⚡", "Jurus profesi", "Tiap profesi punya jurus pamungkas yang terisi tiap beberapa giliran. Pakai di saat yang pas, lalu rebut gelar MVP."],
   ["🚘", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan ngawur, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
   ["🎴", "Dadu Nasib", "Sebagian kartu dan bencana ditentukan lemparan dadu: angka kecil mujur, angka besar apes. Kamu sendiri yang melempar."],
-  ["🕵️", "Awas buzzer", "Bisa jadi ada warga yang diam-diam dibayar Rezim: tak pernah ikut melawan dan tiap ronde menyabotase. Kumpulkan jejak, lalu ketuk warga itu untuk menuduh. Cuma satu kesempatan."],
+  ["🕵️", "Awas buzzer", "Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia, tapi kadang dipalsukan buat memfitnah. Yakin dulu, baru tuduh: cuma satu kesempatan."],
   ["🌾", "Saling jaga", "Lumbung Bersama otomatis menalangi warga yang nggak sanggup bayar. Kalau 2 warga bangkrut, semua kalah."],
 ];
 

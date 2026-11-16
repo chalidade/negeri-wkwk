@@ -54,6 +54,7 @@ export function createInitialState(
   rng: Rng,
   level = 1,
   buzzer: string | null = null,
+  rekrut = false,
 ): GameState {
   if (members.length < 2 || members.length > 6) {
     throw new GameError("jumlah_pemain", "Butuh 2 sampai 6 pemain.");
@@ -106,7 +107,12 @@ export function createInitialState(
     rezimPos: R.BOARD_SIZE / 2,
     kampung: [],
     bersih: [],
-    rahasia: { buzzer: mode === "rakyat_bersatu" && buzzer && players[buzzer] ? buzzer : null, antre: 0 },
+    jejak: {},
+    rahasia: {
+      buzzer: mode === "rakyat_bersatu" && buzzer && players[buzzer] ? buzzer : null,
+      antre: 0,
+      rekrut: mode === "rakyat_bersatu" && rekrut && !buzzer,
+    },
     phase: "awaiting_roll",
     pendingTile: null,
     lastDice: null,
@@ -602,6 +608,7 @@ function rezimTurn(ctx: Ctx): void {
   // Efek giliran Rezim bukan jasa siapa pun, kecuali pemilik usaha yang didatangi pejabat.
   ctx.oleh = null;
 
+  rekrutBuzzer(ctx);
   sabotaseBuzzer(ctx);
   if (isOver(s)) return;
 
@@ -668,13 +675,33 @@ function sabotaseBuzzer(ctx: Ctx): void {
     addSemangat(ctx, -R.SABOTASE_SEMANGAT, "sabotase");
   }
 
-  // Jejak digital: satu warga yang tidak bersalah terbukti bersih.
+  // Jejak digital: sering mengarah ke buzzer, tapi kadang jejak palsu yang memfitnah warga lain.
   if (ctx.rng.int(1, 100) > R.PELUANG_JEJAK * 100) return;
-  const calon = alivePlayers(s).filter((p) => p.id !== id && !s.bersih.includes(p.id));
+  const lain = alivePlayers(s).filter((p) => p.id !== id);
+  const jujur = ctx.rng.int(1, 100) <= R.JEJAK_JUJUR * 100 || lain.length === 0;
+  const ke = jujur ? id : pickRandom(ctx.rng, lain).id;
+  s.jejak[ke] = (s.jejak[ke] ?? 0) + 1;
+  emit(ctx, { type: "jejak", payload: { ke, total: s.jejak[ke] } });
+}
+
+/**
+ * Rezim menyuap warga di tengah permainan. Yang paling kepepet paling gampang dibeli,
+ * jadi buzzer tidak ditentukan dari awal dan siapa pun bisa berubah kapan saja.
+ */
+function rekrutBuzzer(ctx: Ctx): void {
+  const s = ctx.s;
+  if (!s.rahasia.rekrut || s.rahasia.buzzer || s.round < 2) return;
+  if (ctx.rng.int(1, 100) > R.PELUANG_REKRUT * 100) return;
+  // Hanya bot yang bisa disuap; pemain manusia tidak pernah diubah perannya diam-diam.
+  const calon = alivePlayers(s).filter((p) => p.bot && !s.bersih.includes(p.id)).sort((a, b) => a.cuan - b.cuan);
   if (calon.length === 0) return;
-  const bukan = pickRandom(ctx.rng, calon).id;
-  s.bersih.push(bukan);
-  emit(ctx, { type: "jejak", payload: { bukan } });
+  // bobot: termiskin paling berat
+  const bobot = calon.map((_, i) => calon.length - i);
+  let acak = ctx.rng.int(1, bobot.reduce((a, b) => a + b, 0));
+  let pilih = 0;
+  while (acak > bobot[pilih]) acak -= bobot[pilih++];
+  s.rahasia.buzzer = calon[pilih].id;
+  s.rahasia.rekrut = false;
 }
 
 /** Menuduh seorang warga sebagai buzzer. Tiap pemain hanya punya satu kesempatan. */

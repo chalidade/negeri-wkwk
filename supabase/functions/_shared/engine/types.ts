@@ -101,13 +101,20 @@ export interface GameState {
   lumbung: number;
   /** posisi mobil pejabat (pion Rezim) */
   rezimPos: number;
-  /** warga yang sudah terbukti bukan buzzer (lewat jejak atau tuduhan yang salah) */
+  /** warga yang sudah terbukti bukan buzzer (karena pernah salah dituduh) */
   bersih: string[];
+  /** berapa kali jejak digital mengarah ke tiap warga. Jejak bisa dipalsukan, jadi ini bukan bukti. */
+  jejak: Record<string, number>;
   /**
    * Bagian rahasia: siapa buzzer-nya dan sabotase yang sedang disiapkan.
    * Tidak pernah ditampilkan ke pemain sebelum game selesai.
    */
-  rahasia: { buzzer: string | null; antre: number };
+  rahasia: {
+    buzzer: string | null;
+    antre: number;
+    /** Rezim masih mencari warga untuk disuap di tengah permainan */
+    rekrut: boolean;
+  };
   /** grup warna yang sudah pernah jadi Kampung Mandiri */
   kampung: string[];
   phase: Phase;
