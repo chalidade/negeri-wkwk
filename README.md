@@ -2,7 +2,7 @@
 
 Game papan online satire ala monopoli: **rakyat bersatu melawan Pemerintah**. Pemain cari nafkah lewat kerja dan usaha, saling jaga, dan mendorong Reformasi lewat gerakan damai, sambil waspada sama Buzzer yang disusupkan.
 
-Repo ini berisi **backend** (Supabase): skema database, aturan keamanan, engine permainan, dan Edge Functions. Aplikasi Flutter menyusul.
+Repo ini berisi **backend** (Supabase: skema database, aturan keamanan, engine permainan, Edge Functions) dan **aplikasi Flutter** di folder `app/`. Panduan rilis ke Play Store dan App Store ada di [RELEASE.md](RELEASE.md).
 
 ## Arsitektur
 
@@ -60,12 +60,20 @@ supabase/
     _shared/engine/                    engine permainan (TypeScript murni)
       types.ts  rules.ts  core.ts  cards.ts  engine.ts  rng.ts  mod.ts
     _shared/http.ts                    auth, CORS, error JSON
-    create-room/  join-room/  start-game/  game-action/
+    create-room/  join-room/  start-game/  game-action/  delete-account/
   tests/
     engine.test.ts                     unit test + simulasi 1.000 game acak
     rls_test.sql                       uji aturan keamanan
     supabase_stub.sql                  stub auth Supabase untuk uji lokal
     run_db_tests.sh
+    sync.test.ts                       cek board.json & angka aturan sama di app
+app/
+  lib/main.dart                        inisialisasi Supabase + gerbang login
+  lib/screens/                         login, beranda, lobby, permainan
+  lib/widgets/board_view.dart          papan 40 petak + pion
+  lib/models/                          model state, papan, teks event
+  lib/services/api.dart                panggil Edge Functions + realtime
+  assets/board.json                    salinan papan (scripts/sync_board.sh)
 ```
 
 Angka keseimbangan (gaji, sewa, inflasi, denda) ada di `rules.ts`. Ubah di sana saat playtest.
@@ -105,9 +113,9 @@ npm run test:db
    supabase login
    supabase link --project-ref <project-ref>
    supabase db push       # menjalankan migration
-   supabase functions deploy create-room join-room start-game game-action
+   supabase functions deploy create-room join-room start-game game-action delete-account
    ```
-3. Aktifkan login (misalnya Google atau email) di Authentication > Providers.
+3. Di dashboard: Authentication > Sign In / Providers, aktifkan **Allow anonymous sign-ins** (pemain masuk cukup pakai nama).
 
 `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` otomatis tersedia di Edge Functions. **Jangan pernah** taruh service role key di aplikasi Flutter.
 
@@ -121,6 +129,7 @@ Semua `POST` dengan header `Authorization: Bearer <access token user>`.
 | `join-room` | `{ code, profession? }` | `{ roomId, seat }` |
 | `start-game` | `{ roomId }` (host saja) | `{ version, state }` |
 | `game-action` | `{ roomId, version, action }` | `{ version, state, events }` |
+| `delete-account` | `{}` | `{ ok: true }` |
 
 Contoh `action`: `{ "type": "roll" }`, `{ "type": "buy" }`, `{ "type": "upgrade", "tile": 6 }`, `{ "type": "donasi_lumbung", "amount": 100 }`.
 
@@ -128,9 +137,22 @@ Error dikembalikan sebagai `{ error: "<kode>", message: "<pesan Bahasa Indonesia
 
 Di Flutter, berlangganan perubahan dengan Supabase Realtime pada tabel `game_states` (filter `room_id`) dan `game_events`.
 
+## Menjalankan aplikasi
+
+1. Install [Flutter](https://docs.flutter.dev/get-started/install) (stable).
+2. Salin `app/env.example.json` jadi `app/env.json`, isi dengan Project URL dan anon/publishable key dari Supabase > Project Settings > API.
+3. Buat folder platform sekali saja (lihat RELEASE.md bagian 0):
+   ```bash
+   cd app
+   flutter create . --org com.negeriwkwk --project-name negeri_wkwk --platforms=android,ios
+   flutter pub get
+   flutter run --dart-define-from-file=env.json
+   ```
+4. Coba main bareng: jalankan di dua HP/emulator, bikin room di satu, gabung pakai kode di yang lain.
+
 ## Belum dibuat (berikutnya)
 
-- Aplikasi Flutter: lobby, papan, animasi dadu, kartu ringkasan akhir match.
+- Animasi dadu dan pion, suara, kartu ringkasan yang bisa di-share ke story.
 - Kemampuan Buzzer (sebar hoaks, sunat donasi), Cek Fakta, dan Sidang Rakyat.
 - Aksi gerakan lanjutan: Gugatan ke Mahkamah, Mogok Nasional, Pemilu Rakyat.
 - Lumbung untuk menalangi teman, Patungan, Ronda, dan kartu Ordal.

@@ -8,3 +8,9 @@ supabase/.temp/
 # Flutter (nanti)
 build/
 .dart_tool/
+# Kunci Supabase lokal
+app/env.json
+# Kunci tanda tangan rilis
+*.jks
+*.keystore
+app/android/key.properties
