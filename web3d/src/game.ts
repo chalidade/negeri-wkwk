@@ -94,30 +94,23 @@ export function startGame(
   const roundChip = h("div", { class: "chip" });
   const lumbungChip = h("button", { class: "chip lumbung", onclick: () => showLumbung() });
   const speedBtn = h("button", { class: "icon", title: "Kecepatan", onclick: () => toggleSpeed() });
-  const muteBtn = h("button", { class: "icon", title: "Suara", onclick: () => {
-    muteBtn.textContent = toggleMute() ? "🔇" : "🔊";
-  } }, isMuted() ? "🔇" : "🔊");
   const hpFill = h("i", {});
   const hpText = h("b", {});
   const smFill = h("i", {});
   const smText = h("b", {});
-  const panikBadge = h("span", { class: "panik" }, "PANIK! pungutan ×1,5");
+  const panikBadge = h("span", { class: "panik" }, "PANIK ×1,5");
   const hpBar = h("div", { class: "bar hp" }, hpFill, hpText);
+  const smBar = h("div", { class: "bar sm" }, smFill, smText);
   const boss = h(
     "div",
-    { class: "boss", onclick: () => showHelp() },
+    { class: "boss", onclick: () => showBoss() },
     h("div", { class: "boss-face" }, driver.local ? BABAK[state.level - 1].emoji : "🏛️"),
     h(
       "div",
       { class: "boss-main" },
-      h(
-        "div",
-        { class: "boss-name" },
-        h("span", {}, driver.local ? `BABAK ${state.level} · ${BABAK[state.level - 1].nama.toUpperCase()}` : "KEKUASAAN REZIM"),
-        panikBadge,
-      ),
+      h("div", { class: "boss-name" }, h("span", {}, driver.local ? `Babak ${state.level} · ${BABAK[state.level - 1].nama}` : "Rezim"), panikBadge),
       hpBar,
-      h("div", { class: "bar sm" }, smFill, smText),
+      smBar,
     ),
   );
   const chipEls = new Map<string, { el: HTMLElement; money: HTMLElement }>();
@@ -142,13 +135,11 @@ export function startGame(
     h(
       "div",
       { class: "toprow" },
-      h("button", { class: "icon", onclick: () => confirmExit() }, "←"),
+      h("button", { class: "icon", onclick: () => showMenu() }, "☰"),
       roundChip,
       coop ? lumbungChip : null,
       h("div", { style: "flex:1" }),
       speedBtn,
-      muteBtn,
-      h("button", { class: "icon", onclick: () => showHelp() }, "❓"),
     ),
     coop ? boss : null,
     players,
@@ -160,16 +151,17 @@ export function startGame(
   ui.replaceChildren(root);
 
   function updateTop(): void {
-    const sisa = state.maxRounds - state.round + 1;
-    roundChip.textContent = `🗳️ Pemilu ${Math.max(0, sisa)} ronde lagi`;
+    const sisa = Math.max(0, state.maxRounds - state.round + 1);
+    roundChip.textContent = `🗳️ ${sisa} ronde`;
     roundChip.classList.toggle("warn", sisa <= 5);
     lumbungChip.textContent = `🌾 ${drPendek(state.lumbung)}`;
     speedBtn.textContent = speed >= 2 ? "⏩" : "▶️";
     speedBtn.classList.toggle("on", speed >= 2);
     hpFill.style.width = `${(shownK / state.kekuasaanMaks) * 100}%`;
-    hpText.textContent = `❤️ ${shownK} / ${state.kekuasaanMaks}`;
+    hpText.textContent = `❤️ ${shownK}/${state.kekuasaanMaks}`;
     smFill.style.width = `${shownS}%`;
-    smText.textContent = shownS >= 100 ? "✊ DEMO AKBAR!" : shownS >= 75 ? `✊ Semangat Demo ${shownS}%  ·  dikit lagi DEMO!` : `✊ Semangat Demo ${shownS}%`;
+    smText.textContent = shownS >= 100 ? "✊ DEMO!" : `✊ ${shownS}%`;
+    smBar.classList.toggle("hot", shownS >= 75);
     panikBadge.style.display = shownK > 0 && shownK <= batasPanik(state) ? "" : "none";
     const jasaMaks = Math.max(...playersInOrder(state).map((p) => p.jasa));
     for (const p of playersInOrder(state)) {
@@ -178,6 +170,8 @@ export function startGame(
       c.el.classList.toggle("active", state.phase !== "game_over" && state.order[state.turn] === p.id);
       c.el.classList.toggle("dead", p.bankrupt);
       c.el.classList.toggle("mvp", coop && p.jasa > 0 && p.jasa === jasaMaks);
+      c.el.classList.toggle("bersih", state.bersih.includes(p.id) && p.id !== me);
+      c.el.classList.toggle("buzzer", !!p.buzzer);
     }
   }
 
@@ -199,13 +193,13 @@ export function startGame(
   const bossPos = (): Pt => (coop ? center(hpBar) : { x: innerWidth / 2, y: -20 });
   const bankPos = (): Pt => ({ x: innerWidth / 2, y: innerHeight + 30 });
 
+  /** Satu baris kabar singkat di bawah HUD. Baris baru menggantikan yang lama. */
   function say(text: string, kind = ""): void {
     log.push(text);
     if (log.length > 80) log.shift();
     const line = h("div", { class: `line ${kind}` }, text);
-    feed.append(line);
-    while (feed.children.length > 2) feed.firstChild!.remove();
-    setTimeout(() => line.remove(), 3600);
+    feed.replaceChildren(line);
+    setTimeout(() => line.remove(), 2800);
   }
 
   function floatAt(p: Pt, text: string, kind: string): void {
@@ -246,19 +240,40 @@ export function startGame(
   }
 
   /** Kartu besar di tengah layar. Tutup sendiri, atau ketuk untuk lanjut. */
-  function cardPop(c: { kicker: string; icon: string; title: string; text: string; kind: string; foot?: string }, ms: number): Promise<void> {
+  /** Kartu Dadu Nasib yang masih terbuka, menunggu hasil lemparan. */
+  let kartuNasib: { rows: HTMLElement[]; tutup: () => void } | null = null;
+
+  /**
+   * Kartu besar di tengah layar. Kartu biasa menutup sendiri atau saat diketuk.
+   * Kartu Dadu Nasib menampilkan tiga kemungkinan dan tetap terbuka sampai dadu dilempar.
+   */
+  function cardPop(
+    c: { kicker: string; icon: string; title: string; text: string; kind: string; foot?: string; nasib?: string[] | null },
+    ms: number,
+  ): Promise<void> {
     return new Promise((resolve) => {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
+      let lanjutDone = false;
+      let tutupDone = false;
+      const tutup = () => {
+        if (tutupDone) return;
+        tutupDone = true;
         el.classList.add("out");
         setTimeout(() => el.remove(), 220);
+      };
+      const rows = (c.nasib ?? []).map((t, i) => h("div", { class: "n-row" }, h("b", {}, ["2–5", "6–8", "9–12"][i]), h("span", {}, t)));
+      const lempar = c.nasib ? h("button", { class: "btn" }, "🎲 Lempar Dadu Nasib") : null;
+      const lanjut = () => {
+        if (lanjutDone) return;
+        lanjutDone = true;
+        if (c.nasib) {
+          lempar?.remove();
+          kartuNasib = { rows, tutup };
+        } else tutup();
         resolve();
       };
       const el = h(
         "div",
-        { class: "cardwrap", onclick: finish },
+        { class: "cardwrap", onclick: () => !c.nasib && lanjut() },
         h(
           "div",
           { class: `kartu ${c.kind}` },
@@ -266,12 +281,15 @@ export function startGame(
           h("div", { class: "k-icon" }, c.icon),
           h("div", { class: "k-title" }, c.title),
           h("div", { class: "k-text" }, c.text),
+          rows.length > 0 ? h("div", { class: "n-rows" }, ...rows) : null,
+          lempar,
           c.foot ? h("div", { class: "k-foot" }, c.foot) : null,
         ),
       );
+      if (lempar) lempar.onclick = lanjut;
       root.append(el);
       sfx.card();
-      setTimeout(finish, ms / speed);
+      setTimeout(lanjut, ms / speed);
     });
   }
 
@@ -281,7 +299,7 @@ export function startGame(
     return h("div", { class: "die" }, face(1, "f1"), face(6, "f6"), face(2, "f2"), face(5, "f5"), face(3, "f3"), face(4, "f4"));
   }
 
-  async function rollDice(values: number[], tag = ""): Promise<void> {
+  async function rollDice(values: number[], tag = "", diAtasKartu = false): Promise<void> {
     sfx.dice();
     navigator.vibrate?.(30);
     const dice = values.map((v) => {
@@ -299,8 +317,9 @@ export function startGame(
     const kembar = values[0] === values[1];
     const total = h("div", { class: "dice-total" }, kembar ? `${values[0] + values[1]} · KEMBAR!` : String(values[0] + values[1]));
     const wrap = h("div", { class: "dice" }, h("div", { class: "dice-row" }, ...dice), total, tag ? h("div", { class: "dice-tag" }, tag) : null);
-    fx.append(wrap);
-    await wait(1050);
+    if (diAtasKartu) wrap.classList.add("ontop");
+    (diAtasKartu ? root : fx).append(wrap);
+    await wait(diAtasKartu ? 1500 : 1050);
     wrap.classList.add("out");
     setTimeout(() => wrap.remove(), 220);
   }
@@ -504,8 +523,8 @@ export function startGame(
           baik ? sfx.good() : sfx.bad();
           if (!mine) {
             if (a) scene.burstAtPawn(a, baik ? "coins" : "dust");
-            say(`${line} (${p.teks})`, baik ? "good" : "bad");
-            await wait(900);
+            say(line!, baik ? "good" : "bad");
+            await wait(800);
             break;
           }
           await cardPop(
@@ -515,9 +534,9 @@ export function startGame(
               title: String(p.judul),
               text: String(p.teks),
               kind: baik ? "good" : "bad",
-              foot: mine ? "Kamu yang dapat" : `${nm(a)} yang dapat`,
+              nasib: p.nasib as string[] | null,
             },
-            3200,
+            p.nasib ? 7000 : 3200,
           );
           if (a) scene.burstAtPawn(a, baik ? "coins" : "dust");
           say(line!, baik ? "good" : "bad");
@@ -535,13 +554,67 @@ export function startGame(
               text: String(p.teks),
               kind: bencana ? "bencana" : "rezim",
               foot: "Berlaku untuk semua warga",
+              nasib: p.nasib as string[] | null,
             },
-            2600,
+            p.nasib ? 6000 : 2600,
           );
           say(line!, "bad");
-          await kebijakanFx(String(p.id), next);
+          if (!p.nasib) await kebijakanFx(String(p.id), next);
           break;
         }
+        case "dadu_nasib": {
+          const dadu = p.dadu as number[];
+          const t = Number(p.tingkat);
+          const label = ["MUJUR!", "LUMAYAN", "APES!"][t];
+          if (!kartuNasib) {
+            // kartu milik bot: cukup kabar singkat
+            say(`🎲 ${dadu[0] + dadu[1]} ${label} ${p.teks}`, t === 0 ? "good" : "bad");
+            await wait(1100);
+            break;
+          }
+          await rollDice(dadu, label, true);
+          kartuNasib.rows.forEach((r, i) => r.classList.add(i === t ? "kena" : "lewat"));
+          t === 0 ? sfx.good() : t === 2 ? sfx.bad() : sfx.click();
+          navigator.vibrate?.(t === 2 ? [80, 40, 120] : 40);
+          await wait(2000);
+          kartuNasib.tutup();
+          kartuNasib = null;
+          // kartu akhir ronde: efek peta hanya kalau memang kena
+          if (!a && t > 0) await kebijakanFx(String(p.id), next);
+          else if (!a) say("😮‍💨 Selamat, kali ini lolos.", "good");
+          break;
+        }
+        case "sabotase": {
+          sfx.siren();
+          screenFx("alarm", 1500);
+          say(line!, "bad");
+          const isi =
+            p.jenis === "tilep"
+              ? `Kas Lumbung ditilep ${dr(p.jumlah)}`
+              : p.jenis === "lapor"
+                ? `${nm(String(p.korban))} dilaporkan ke aparat`
+                : "Tagar tandingan dikerahkan: Semangat turun";
+          await banner("bad", "🕵️ SABOTASE!", isi, 1700);
+          break;
+        }
+        case "jejak":
+          sfx.good();
+          state = { ...state, bersih: [...state.bersih, String(p.bukan)] };
+          updateTop();
+          say(line!, "good");
+          await banner("info", "🔎 JEJAK DIGITAL", `Buzzernya bukan ${nm(String(p.bukan))}`, 1700);
+          break;
+        case "buzzer_terbongkar":
+          sfx.fanfare();
+          scene.burstAtPawn(String(p.target), "confetti");
+          say(line!, "good");
+          await banner("good", "BUZZER TERBONGKAR!", `${nm(String(p.target))} ternyata dibayar Rezim. ${mine ? "Tuduhanmu" : `Tuduhan ${nm(a)}`} tepat!`, 2400);
+          break;
+        case "tuduh_salah":
+          sfx.bad();
+          say(line!, "bad");
+          await banner("bad", "SALAH TUDUH!", `${nm(String(p.target))} bukan buzzer. Semangat turun, ${mine ? "kamu" : nm(a)} kena denda.`, 2200);
+          break;
         case "kena_tilang":
           sfx.siren();
           screenFx("siren", 1000);
@@ -732,7 +805,8 @@ export function startGame(
       // selisih uang tampil di kartu pemain
       for (const p of playersInOrder(state)) {
         const d = p.cuan - (prev.players[p.id]?.cuan ?? p.cuan);
-        if (d !== 0) floatAt(chipPos(p.id), `${d > 0 ? "+" : "−"}${drPendek(Math.abs(d))}`, d > 0 ? "plus" : "minus");
+        const at = chipPos(p.id);
+        if (d !== 0) floatAt({ x: at.x, y: at.y + 30 }, `${d > 0 ? "+" : "−"}${drPendek(Math.abs(d))}`, d > 0 ? "plus" : "minus");
       }
       updateTop();
     }
@@ -816,6 +890,15 @@ export function startGame(
         h("div", { class: "reward" }, h("b", {}, `+${hadiah.xp} XP`), hadiah.emas > 0 ? h("b", {}, `+${hadiah.emas} 🪙 Emas Antum`) : null),
         h("div", { class: "xpbar" }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` }), h("b", {}, pk.berikut ? `🎖️ ${pk.nama} → ${pk.berikut}` : `🎖️ ${pk.nama}`)),
         hadiah.babakBaru ? h("div", { class: "unlock" }, `🔓 Babak ${hadiah.babakBaru} terbuka: ${BABAK[hadiah.babakBaru - 1].nama}`) : null,
+        coop
+          ? h(
+              "div",
+              { class: "muted small" },
+              state.rahasia.buzzer
+                ? `🕵️ Buzzernya ternyata ${state.players[state.rahasia.buzzer].name}${state.players[state.rahasia.buzzer].buzzer ? " (sudah terbongkar)" : " (lolos sampai akhir!)"}.`
+                : "🕵️ Tidak ada buzzer di permainan ini. Curiganya saja yang capek.",
+            )
+          : null,
         res.win && hadiah.bintang < 3
           ? h("div", { class: "muted small" }, "★★ menang dengan sisa 3 ronde atau lebih  ·  ★★★ sekaligus jadi MVP")
           : null,
@@ -1010,7 +1093,7 @@ export function startGame(
     if (state.phase === "game_over") hint = "Permainan selesai.";
     else if (!meP) hint = `👀 Kamu menonton. Giliran ${cur.name}.`;
     else if (meP.bankrupt) hint = "💀 Kamu bangkrut. Semoga warga lain bisa menumbangkan Rezim.";
-    else if (!myTurn()) hint = cur.bot ? `🤖 Giliran ${cur.name}…` : `⏳ Giliran ${cur.name}…`;
+    else if (!myTurn()) hint = cur.bot ? `🤖 ${cur.name}…` : `⏳ ${cur.name}…`;
     else if (state.phase === "awaiting_buy" && state.pendingTile !== null) {
       const i = state.pendingTile;
       const rebut = state.tiles[i].owner === GOV;
@@ -1116,10 +1199,20 @@ export function startGame(
       }
     }
 
+    const giliranku = myTurn() && !!meP && !meP.bankrupt;
+    if (!giliranku) {
+      // Bukan giliranku: cukup pil kecil, papan dapat ruang penuh.
+      bottom.replaceChildren(h("div", { class: "turnpill" }, hint));
+      bottomInset = 62;
+      fit();
+      return;
+    }
     bottom.replaceChildren(
-      meteran ?? h("div", { class: `hint${myTurn() && !locked ? " mine" : ""}` }, hint),
+      meteran ?? h("div", { class: `hint${!locked ? " mine" : ""}` }, hint),
       h("div", { class: "actions" }, h("div", { class: "side-row" }, ...side.slice(0, 2)), h("div", { class: "main-row" }, ...main), h("div", { class: "side-row" }, ...side.slice(2))),
     );
+    bottomInset = bottom.offsetHeight + 2;
+    fit();
   }
 
   // ------------------------------------------------------------------ lembar info
@@ -1265,6 +1358,18 @@ export function startGame(
       h("div", { class: "muted" }, `Keahlian: ${PROFESSION_SKILL[p.profession]}`),
       h("div", { class: "muted" }, `⚡ Jurus ${JURUS[p.profession].nama} (${p.jurus}/${JURUS_PENUH}): ${JURUS[p.profession].efek}.`),
       coop ? row("Jasa melawan Rezim", `${p.jasa} poin`) : null,
+      coop && id !== me
+        ? h(
+            "div",
+            { class: "tag", style: `background:${p.buzzer ? "var(--red)" : state.bersih.includes(id) ? "var(--green)" : "#8a97ad"}` },
+            p.buzzer ? "🕵️ Buzzer (terbongkar)" : state.bersih.includes(id) ? "✅ Terbukti bukan buzzer" : "❓ Belum jelas",
+          )
+        : null,
+      coop && id !== me && !p.buzzer && !p.bankrupt && !state.bersih.includes(id) && state.players[me] && !state.players[me].sudahTuduh
+        ? myTurn() && !playing && state.phase !== "awaiting_buy"
+          ? h("button", { class: "btn small red", onclick: () => tuduh(id) }, "🕵️ Tuduh sebagai buzzer")
+          : h("div", { class: "muted small" }, "Menuduh hanya bisa di giliranmu.")
+        : null,
       row("Uang", dr(p.cuan)),
       row("Total harta", dr(netWorth(state, p))),
       id === me && driver.role() === "buzzer" ? h("div", { class: "tag", style: "background:#3a3f4b" }, "🤫 Kamu Buzzer") : null,
@@ -1272,6 +1377,50 @@ export function startGame(
         ? h("div", { class: "muted" }, `Usaha: ${usaha.map((x) => `${TILES[x.i].name} (${LEVEL_LABEL[x.t.level]})`).join(", ")}`)
         : h("div", { class: "muted" }, "Belum punya usaha."),
       h("button", { class: "btn small grey", onclick: () => showLog() }, "📜 Lihat riwayat"),
+    );
+  }
+
+  function showMenu(): void {
+    const suara = h("button", { class: "btn grey block" }, isMuted() ? "🔇 Suara mati" : "🔊 Suara nyala");
+    suara.onclick = () => (suara.textContent = toggleMute() ? "🔇 Suara mati" : "🔊 Suara nyala");
+    const close = sheet(
+      h("div", { class: "sheet-title" }, "Menu"),
+      h("button", { class: "btn grey block", onclick: () => (close(), showHelp()) }, "❓ Cara main"),
+      suara,
+      h("button", { class: "btn grey block", onclick: () => (close(), showLog()) }, "📜 Riwayat"),
+      h("button", { class: "btn red block", onclick: () => (close(), confirmExit()) }, "🚪 Keluar"),
+    );
+  }
+
+  function showBoss(): void {
+    sheet(
+      h("div", { class: "sheet-title" }, driver.local ? `${BABAK[state.level - 1].emoji} ${BABAK[state.level - 1].nama}` : "🏛️ Rezim"),
+      row("❤️ Kekuasaan", `${state.kekuasaan} / ${state.kekuasaanMaks}`),
+      h("div", { class: "muted" }, "Habiskan sebelum Pemilu. Turun lewat Demo Akbar, Liputan Media, jurus, Kampung Mandiri, dan tiap mobil pejabat mampir ke usaha rakyat."),
+      row("✊ Semangat Demo", `${state.semangat}%`),
+      h("div", { class: "muted" }, "Naik saat warga beli atau upgrade usaha, bikin petisi, dan kena pungli. Penuh = Demo Akbar."),
+      state.kekuasaan <= batasPanik(state)
+        ? h("div", { class: "tag", style: "background:var(--red)" }, "Rezim panik: semua pungutan 1,5x")
+        : h("div", { class: "muted" }, "Kalau Kekuasaan tinggal separuh, Rezim panik dan semua pungutan jadi 1,5x."),
+      h("div", { class: "muted" }, "🕵️ Hati-hati buzzer: bisa jadi ada warga yang diam-diam dibayar Rezim. Dia tidak pernah ikut melawan, dan tiap ronde menyabotase. Ketuk warga yang kamu curigai untuk menuduh."),
+    );
+  }
+
+  function tuduh(id: string): void {
+    const p = state.players[id];
+    const close = modal(
+      h(
+        "div",
+        { class: "sheet col" },
+        h("div", { class: "sheet-title" }, `🕵️ Tuduh ${p.name} buzzer?`),
+        h("div", { class: "muted" }, "Benar: buzzer terbongkar, Kekuasaan −12 dan Semangat +20. Salah: kamu didenda DR 1,5 jt dan Semangat −12. Kamu cuma punya satu kesempatan per permainan."),
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "btn grey", style: "flex:1", onclick: () => close() }, "Batal"),
+          h("button", { class: "btn red", style: "flex:1", onclick: () => (close(), void send({ type: "tuduh", target: id })) }, "Tuduh!"),
+        ),
+      ),
     );
   }
 
@@ -1310,18 +1459,23 @@ export function startGame(
     };
   }
 
-  const fit = () => {
-    root.style.setProperty("--feed-top", `${top.offsetHeight + 6}px`);
+  let bottomInset = 62;
+  function fit(): void {
+    root.style.setProperty("--feed-top", `${top.offsetHeight + 4}px`);
     // Layar lebar (tablet/desktop): HUD menepi ke kiri, papan memakai seluruh tinggi layar.
     const lebar = innerWidth > innerHeight * 1.2;
-    scene.setInsets(lebar ? 0 : top.offsetHeight + 6, lebar ? 40 : 200);
-  };
+    scene.setInsets(lebar ? 0 : top.offsetHeight + 4, lebar ? 40 : bottomInset);
+  }
+
   updateTop();
   renderBottom();
   requestAnimationFrame(fit);
   window.addEventListener("resize", fit);
   const unsub = driver.subscribe(enqueue);
   scene.focusPawn(state.order[state.turn]);
+  if (coop && version === 1) {
+    setTimeout(() => !disposed && void banner("info", "🕵️ AWAS BUZZER", "Kabarnya ada warga yang diam-diam dibayar Rezim", 2600), 900);
+  }
   if (state.phase === "game_over") void showGameOver();
   else if (!localStorage.getItem(HELP_SEEN)) showHelp(() => afterIdle());
   else afterIdle();

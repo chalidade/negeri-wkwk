@@ -55,6 +55,10 @@ export interface PlayerState {
   jurus: number;
   /** poin jasa melawan Rezim, penentu MVP */
   jasa: number;
+  /** sudah memakai satu-satunya kesempatan menuduh buzzer */
+  sudahTuduh?: boolean;
+  /** buzzer yang sudah terbongkar (diketahui semua orang) */
+  buzzer?: boolean;
   /** true kalau pemain ini dijalankan komputer */
   bot?: boolean;
 }
@@ -97,6 +101,13 @@ export interface GameState {
   lumbung: number;
   /** posisi mobil pejabat (pion Rezim) */
   rezimPos: number;
+  /** warga yang sudah terbukti bukan buzzer (lewat jejak atau tuduhan yang salah) */
+  bersih: string[];
+  /**
+   * Bagian rahasia: siapa buzzer-nya dan sabotase yang sedang disiapkan.
+   * Tidak pernah ditampilkan ke pemain sebelum game selesai.
+   */
+  rahasia: { buzzer: string | null; antre: number };
   /** grup warna yang sudah pernah jadi Kampung Mandiri */
   kampung: string[];
   phase: Phase;
@@ -117,6 +128,8 @@ export type Gaya = "pelan" | "sedang" | "kencang";
 export type Action =
   | { type: "roll"; gaya?: Gaya }
   | { type: "jurus" }
+  | { type: "sabotase" }
+  | { type: "tuduh"; target: string }
   | { type: "buy" }
   | { type: "skip_buy" }
   | { type: "upgrade"; tile: number }

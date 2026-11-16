@@ -102,6 +102,8 @@ export class GameScene {
   private goalDist = 60;
   private follow: THREE.Object3D | null = null;
   private insets = { top: 0, bottom: 0 };
+  /** pergeseran gambar (px) supaya papan berada di tengah area yang tidak tertutup HUD */
+  private viewShift = 0;
   private overviewDist = 60;
   private focusDist = 30;
 
@@ -735,7 +737,7 @@ export class GameScene {
   /** Arahkan kamera ke sebuah titik, digeser sedikit ke tengah papan supaya papan mengisi layar. */
   private aim(x: number, z: number): void {
     const d = Math.hypot(x, z) || 1;
-    const shift = Math.min(2.2, d);
+    const shift = Math.min(4.2, d);
     this.goalTarget.set(x - (x / d) * shift, TOP, z - (z / d) * shift - 0.3);
   }
 
@@ -771,7 +773,10 @@ export class GameScene {
 
   /** Tinggi HUD atas & bawah (px) supaya papan dipusatkan di area yang kosong. */
   setInsets(top: number, bottom: number): void {
+    if (this.insets.top === top && this.insets.bottom === bottom) return;
+    const pertama = this.insets.top === 0 && this.insets.bottom === 0;
     this.insets = { top, bottom };
+    if (pertama) this.viewShift = (top - bottom) / 2;
     this.resize();
   }
 
@@ -781,7 +786,7 @@ export class GameScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     const free = Math.max(160, h - this.insets.top - this.insets.bottom);
-    this.camera.setViewOffset(w, h, 0, -(this.insets.top - this.insets.bottom) / 2, w, h);
+    this.camera.setViewOffset(w, h, 0, -this.viewShift, w, h);
     this.camera.updateProjectionMatrix();
 
     const tan = Math.tan((FOV * Math.PI) / 360);
@@ -886,6 +891,15 @@ export class GameScene {
     // kamera mengikuti sasaran dengan halus
     if (this.follow) this.aim(this.follow.position.x, this.follow.position.z);
     const a = 1 - Math.exp(-dt * 5);
+    // HUD bawah berubah tinggi tiap giliran: geser gambar pelan-pelan, jangan melompat
+    const goalShift = (this.insets.top - this.insets.bottom) / 2;
+    if (Math.abs(goalShift - this.viewShift) > 0.5) {
+      this.viewShift += (goalShift - this.viewShift) * a;
+      const w = this.host.clientWidth || window.innerWidth;
+      const h = this.host.clientHeight || window.innerHeight;
+      this.camera.setViewOffset(w, h, 0, -this.viewShift, w, h);
+      this.camera.updateProjectionMatrix();
+    }
     this.camTarget.lerp(this.goalTarget, a);
     this.camDist += (this.goalDist - this.camDist) * a;
     this.camera.position.copy(this.camTarget).addScaledVector(CAM_DIR, this.camDist);

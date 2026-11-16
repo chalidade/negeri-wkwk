@@ -59,9 +59,19 @@ export const JURUS_DAMAGE = 7;
 // --- babak (tingkat kesulitan Rezim)
 export const MAX_BABAK = 10;
 /** Pengali nyawa Rezim per babak. */
-export const nyawaBabak = (level: number): number => 1 + 0.052 * (level - 1);
+export const nyawaBabak = (level: number): number => 1.13 + 0.04 * (level - 1);
 /** Pengali pungutan Rezim per babak. */
 export const pungutanBabak = (level: number): number => 1 + 0.045 * (level - 1);
+
+// --- buzzer: warga yang diam-diam dibayar Rezim
+export const SABOTASE_SEMANGAT = 10;
+export const SABOTASE_LUMBUNG = 0.3;
+/** Peluang tiap sabotase meninggalkan jejak yang membersihkan satu warga. */
+export const PELUANG_JEJAK = 0.6;
+export const BONGKAR_DAMAGE = 12;
+export const BONGKAR_SEMANGAT = 20;
+export const FITNAH_DENDA = 1_500_000;
+export const FITNAH_SEMANGAT = 12;
 
 export const LAMA_TILANG = 2;
 export const DENDA_TILANG = 800_000;

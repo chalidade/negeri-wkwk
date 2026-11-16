@@ -30,8 +30,53 @@ export interface CardDef {
   meredam?: boolean;
   /** kartu akhir ronde: "bencana" bukan ulah Rezim, tampil beda di UI */
   jenis?: "bencana";
+  apply?(ctx: Ctx, playerId: string): void;
+  /**
+   * Dadu Nasib: hasil kartu ditentukan lemparan dua dadu.
+   * [2-5 mujur, 6-8 lumayan, 9-12 apes]. Makin besar angkanya, makin rugi.
+   */
+  nasib?: [Tingkat, Tingkat, Tingkat];
+}
+
+export interface Tingkat {
+  teks: string;
   apply(ctx: Ctx, playerId: string): void;
 }
+
+/** Jalankan efek kartu. Kartu Dadu Nasib melempar dadu dulu untuk menentukan tingkatnya. */
+export function jalankanKartu(ctx: Ctx, card: CardDef, playerId: string): void {
+  if (!card.nasib) return card.apply?.(ctx, playerId);
+  const dadu: [number, number] = [ctx.rng.int(1, 6), ctx.rng.int(1, 6)];
+  const jumlah = dadu[0] + dadu[1];
+  const tingkat = jumlah <= 5 ? 0 : jumlah <= 8 ? 1 : 2;
+  emit(ctx, {
+    type: "dadu_nasib",
+    ...(playerId ? { actor: playerId } : {}),
+    payload: { id: card.id, dadu, tingkat, teks: card.nasib[tingkat].teks },
+  });
+  card.nasib[tingkat].apply(ctx, playerId);
+}
+
+const kosong = () => undefined;
+/** Semua warga rugi (bukan pungutan Rezim). Lumbung menanggung separuhnya kalau `talang`. */
+function semuaRugi(ctx: Ctx, jumlah: number, talang = false): void {
+  for (const p of alivePlayers(ctx.s)) {
+    if (ctx.s.phase === "game_over") return;
+    if (talang && coop(ctx.s)) transfer(ctx, LUMBUNG, p.id, jumlah / 2);
+    transfer(ctx, p.id, BANK, jumlah);
+  }
+}
+/** Satu usaha bertingkat milik tiap warga rusak dan turun satu tingkat. */
+function usahaRusak(ctx: Ctx): void {
+  for (const p of alivePlayers(ctx.s)) {
+    const milik = ctx.s.tiles.map((t, i) => ({ t, i })).filter((x) => x.t.owner === p.id && x.t.level > 0);
+    if (milik.length === 0) continue;
+    const kena = pickRandom(ctx.rng, milik);
+    kena.t.level -= 1;
+    emit(ctx, { type: "usaha_rusak", actor: p.id, payload: { tile: kena.i, level: kena.t.level } });
+  }
+}
+const jumlahUsaha = (ctx: Ctx, id: string) => Math.max(1, ctx.s.tiles.filter((t) => t.owner === id).length);
 
 const JT = 1_000_000;
 const dapat = (ctx: Ctx, id: string, n: number) => transfer(ctx, BANK, id, n);
@@ -154,6 +199,68 @@ export const NASIB_WNI: CardDef[] = [
     apply: (ctx, id) => void bayar(ctx, id, 0.4 * JT),
   },
   {
+    id: "ortu_sakit",
+    judul: "Orang Tua Sakit",
+    teks: "Generasi sandwich diuji lagi. Lempar Dadu Nasib.",
+    baik: false,
+    nasib: [
+      { teks: "Cuma masuk angin, dikerok sembuh. Keluar DR 100 rb.", apply: (ctx, id) => void bayar(ctx, id, 0.1 * JT) },
+      { teks: "Rawat jalan, obatnya nggak ditanggung. Bayar DR 900 rb.", apply: (ctx, id) => void bayar(ctx, id, 0.9 * JT) },
+      {
+        teks: "Opname seminggu. Bayar DR 2,5 jt dan lewati giliran berikutnya buat jaga di RS.",
+        apply(ctx, id) {
+          bayar(ctx, id, 2.5 * JT);
+          const p = player(ctx.s, id);
+          if (!p.bankrupt) p.skipNext = true;
+        },
+      },
+    ],
+  },
+  {
+    id: "wawancara_kerja",
+    judul: "Panggilan Wawancara",
+    teks: "Lamaran ke-47 akhirnya dibalas. Lempar Dadu Nasib.",
+    baik: true,
+    nasib: [
+      { teks: "Diterima! Gaji pertama cair DR 2 jt.", apply: (ctx, id) => void dapat(ctx, id, 2 * JT) },
+      { teks: "\"Nanti kami kabari.\" Ongkos jalan hangus DR 200 rb.", apply: (ctx, id) => void bayar(ctx, id, 0.2 * JT) },
+      { teks: "Ternyata lowongan bodong. Ketipu \"biaya administrasi\" DR 1,2 jt.", apply: (ctx, id) => void bayar(ctx, id, 1.2 * JT) },
+    ],
+  },
+  {
+    id: "jualan_cfd",
+    judul: "Jualan di Car Free Day",
+    teks: "Modal nekat, gelar lapak. Lempar Dadu Nasib.",
+    baik: true,
+    nasib: [
+      { teks: "Ludes sebelum jam 9! Untung DR 1,8 jt.", apply: (ctx, id) => void dapat(ctx, id, 1.8 * JT) },
+      { teks: "Lumayan rame. Untung DR 700 rb.", apply: (ctx, id) => void dapat(ctx, id, 0.7 * JT) },
+      { teks: "Hujan deras plus digusur petugas. Rugi DR 500 rb.", apply: (ctx, id) => void bayar(ctx, id, 0.5 * JT) },
+    ],
+  },
+  {
+    id: "cicilan_motor",
+    judul: "Cicilan Motor Jatuh Tempo",
+    teks: "Debt collector sudah nelpon. Lempar Dadu Nasib.",
+    baik: false,
+    nasib: [
+      { teks: "Ada rezeki nomplok, cicilan lunas duluan. Cashback DR 300 rb.", apply: (ctx, id) => void dapat(ctx, id, 0.3 * JT) },
+      { teks: "Bayar tepat waktu. Keluar DR 700 rb.", apply: (ctx, id) => void bayar(ctx, id, 0.7 * JT) },
+      { teks: "Telat tiga bulan, kena denda dan biaya tarik. Bayar DR 1,6 jt.", apply: (ctx, id) => void bayar(ctx, id, 1.6 * JT) },
+    ],
+  },
+  {
+    id: "tes_cpns",
+    judul: "Tes CPNS",
+    teks: "Jutaan pelamar, segelintir kursi. Lempar Dadu Nasib.",
+    baik: true,
+    nasib: [
+      { teks: "Lolos murni! Tunjangan cair DR 2,5 jt.", apply: (ctx, id) => void dapat(ctx, id, 2.5 * JT) },
+      { teks: "Gagal di tahap akhir. Biaya bimbel DR 300 rb hangus.", apply: (ctx, id) => void bayar(ctx, id, 0.3 * JT) },
+      { teks: "Kalah sama titipan. Keluar DR 900 rb buat coba lagi tahun depan.", apply: (ctx, id) => void bayar(ctx, id, 0.9 * JT) },
+    ],
+  },
+  {
     id: "posting_kritik",
     judul: "Diciduk Gara-gara Posting",
     teks: "Kritikmu dianggap meresahkan. Kamu kena tilang, tapi warga makin marah: Semangat Demo naik.",
@@ -223,6 +330,17 @@ export const GRUP_WA: CardDef[] = [
     teks: "\"Minggu depan diganti.\" Kita semua tahu akhirnya. Hilang DR 700 rb.",
     baik: false,
     apply: (ctx, id) => void bayar(ctx, id, 0.7 * JT),
+  },
+  {
+    id: "investasi_teman",
+    judul: "Diajak Investasi Teman SMA",
+    teks: "\"Profit 30% sebulan, dijamin.\" Lempar Dadu Nasib.",
+    baik: false,
+    nasib: [
+      { teks: "Kamu curiga dan menolak. Uang aman, malah dapat traktiran DR 200 rb.", apply: (ctx, id) => void dapat(ctx, id, 0.2 * JT) },
+      { teks: "Ikut sedikit, balik modal doang. Nggak untung, nggak rugi.", apply: kosong },
+      { teks: "Bandarnya kabur ke luar negeri. Hilang DR 2 jt.", apply: (ctx, id) => void bayar(ctx, id, 2 * JT) },
+    ],
   },
   {
     id: "kondangan",
@@ -439,51 +557,119 @@ export const KEBIJAKAN: CardDef[] = [
   {
     id: "banjir_bandang",
     judul: "Banjir Bandang",
-    teks: "Semua warga rugi DR 600 rb. Lumbung Bersama menanggung separuhnya selama dananya ada.",
+    teks: "Hujan semalaman, sungai meluap. Lempar Dadu Nasib.",
     baik: false,
     meredam: true,
     jenis: "bencana",
-    apply(ctx) {
-      for (const p of alivePlayers(ctx.s)) {
-        if (ctx.s.phase === "game_over") return;
-        if (coop(ctx.s)) transfer(ctx, LUMBUNG, p.id, 0.3 * JT);
-        bayar(ctx, p.id, 0.6 * JT);
-      }
-    },
+    nasib: [
+      { teks: "Cuma genangan. Besok pagi sudah kering.", apply: kosong },
+      { teks: "Rumah kerendam: semua warga rugi DR 500 rb. Lumbung menanggung separuhnya.", apply: (ctx) => semuaRugi(ctx, 0.5 * JT, true) },
+      {
+        teks: "Banjir besar: semua warga rugi DR 1 jt (Lumbung menanggung separuh) dan satu usahanya turun tingkat.",
+        apply(ctx) {
+          semuaRugi(ctx, 1 * JT, true);
+          usahaRusak(ctx);
+        },
+      },
+    ],
   },
   {
     id: "gempa",
     judul: "Gempa Bumi",
-    teks: "Tiap warga: satu usahanya rusak dan turun satu tingkat. Yang belum punya bangunan bertingkat bayar DR 300 rb.",
+    teks: "Lampu bergoyang, warga berhamburan. Lempar Dadu Nasib.",
     baik: false,
     meredam: true,
     jenis: "bencana",
-    apply(ctx) {
-      for (const p of alivePlayers(ctx.s)) {
-        if (ctx.s.phase === "game_over") return;
-        const milik = ctx.s.tiles.map((t, i) => ({ t, i })).filter((x) => x.t.owner === p.id && x.t.level > 0);
-        if (milik.length === 0) {
-          bayar(ctx, p.id, 0.3 * JT);
-          continue;
-        }
-        const kena = pickRandom(ctx.rng, milik);
-        kena.t.level -= 1;
-        emit(ctx, { type: "usaha_rusak", actor: p.id, payload: { tile: kena.i, level: kena.t.level } });
-      }
-    },
+    nasib: [
+      { teks: "Cuma getaran kecil. Semua selamat.", apply: kosong },
+      { teks: "Tembok retak: satu usaha tiap warga turun satu tingkat.", apply: (ctx) => usahaRusak(ctx) },
+      {
+        teks: "Gempa besar: satu usaha tiap warga turun tingkat, dan semua bayar perbaikan DR 700 rb.",
+        apply(ctx) {
+          usahaRusak(ctx);
+          semuaRugi(ctx, 0.7 * JT);
+        },
+      },
+    ],
   },
   {
     id: "kabut_asap",
     judul: "Kabut Asap",
-    teks: "Lahan dibakar lagi, semua sesak napas. Tiap warga bayar berobat DR 400 rb.",
+    teks: "Lahan dibakar lagi. Lempar Dadu Nasib.",
     baik: false,
     meredam: true,
     jenis: "bencana",
-    apply(ctx) {
-      for (const p of alivePlayers(ctx.s)) {
-        if (ctx.s.phase === "game_over") return;
-        bayar(ctx, p.id, 0.4 * JT);
-      }
-    },
+    nasib: [
+      { teks: "Angin berpihak, asapnya lewat begitu saja.", apply: kosong },
+      { teks: "Sesak napas: semua warga bayar berobat DR 300 rb.", apply: (ctx) => semuaRugi(ctx, 0.3 * JT) },
+      { teks: "ISPA massal, sekolah dan toko tutup: semua warga rugi DR 800 rb.", apply: (ctx) => semuaRugi(ctx, 0.8 * JT) },
+    ],
+  },
+  {
+    id: "gunung_meletus",
+    judul: "Gunung Meletus",
+    teks: "Status naik jadi Awas. Lempar Dadu Nasib.",
+    baik: false,
+    meredam: true,
+    jenis: "bencana",
+    nasib: [
+      { teks: "Statusnya turun lagi. Warga batal mengungsi.", apply: kosong },
+      { teks: "Hujan abu: semua warga rugi DR 400 rb. Lumbung menanggung separuhnya.", apply: (ctx) => semuaRugi(ctx, 0.4 * JT, true) },
+      { teks: "Erupsi besar: semua warga rugi DR 900 rb. Lumbung menanggung separuhnya.", apply: (ctx) => semuaRugi(ctx, 0.9 * JT, true) },
+    ],
+  },
+  {
+    id: "phk_massal",
+    judul: "Kabar PHK Massal",
+    teks: "Pabrik kalah sama barang impor murah. Lempar Dadu Nasib.",
+    baik: false,
+    meredam: true,
+    nasib: [
+      { teks: "Pabriknya batal tutup. Semua bisa napas lega.", apply: kosong },
+      { teks: "Jam kerja dipotong: semua warga kehilangan DR 500 rb.", apply: (ctx) => semuaRugi(ctx, 0.5 * JT) },
+      {
+        teks: "PHK besar-besaran: semua warga kehilangan DR 1 jt, buruh dua kali lipat. Warga marah: Semangat naik.",
+        apply(ctx) {
+          for (const p of alivePlayers(ctx.s)) {
+            if (ctx.s.phase === "game_over") return;
+            transfer(ctx, p.id, BANK, (p.profession === "buruh" ? 2 : 1) * JT);
+          }
+          addSemangat(ctx, 8, "phk_massal");
+        },
+      },
+    ],
+  },
+  {
+    id: "rupiah_melemah",
+    judul: "Rupiah Melemah",
+    teks: "Harga bahan baku impor ikut naik. Lempar Dadu Nasib.",
+    baik: false,
+    meredam: true,
+    nasib: [
+      { teks: "Cuma sebentar, kurs balik lagi. Aman.", apply: kosong },
+      {
+        teks: "Modal dagang naik: tiap warga bayar DR 200 rb per usaha.",
+        apply(ctx) {
+          for (const p of alivePlayers(ctx.s)) transfer(ctx, p.id, BANK, jumlahUsaha(ctx, p.id) * 0.2 * JT);
+        },
+      },
+      {
+        teks: "Harga meroket: tiap warga bayar DR 400 rb per usaha.",
+        apply(ctx) {
+          for (const p of alivePlayers(ctx.s)) transfer(ctx, p.id, BANK, jumlahUsaha(ctx, p.id) * 0.4 * JT);
+        },
+      },
+    ],
+  },
+  {
+    id: "harga_beras",
+    judul: "Harga Beras Naik",
+    teks: "Stok katanya aman, harga di pasar bilang lain. Lempar Dadu Nasib.",
+    baik: false,
+    nasib: [
+      { teks: "Operasi pasar datang tepat waktu. Harga turun lagi.", apply: kosong },
+      { teks: "Semua warga bayar lebih DR 400 rb.", apply: (ctx) => semuaBayar(ctx, () => 0.4 * JT) },
+      { teks: "Beras langka sebulan: semua warga bayar DR 900 rb.", apply: (ctx) => semuaBayar(ctx, () => 0.9 * JT) },
+    ],
   },
 ];

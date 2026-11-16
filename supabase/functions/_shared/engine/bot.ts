@@ -75,7 +75,9 @@ export function pilihGaya(s: GameState, id: string, reserve = 2_500_000): Gaya {
  */
 export function decideBotAction(s: GameState, botId: string, role: PlayerSecret["role"] = "rakyat"): Action {
   const p = s.players[botId];
-  const kawan = coop(s) && role === "rakyat";
+  // Buzzer yang belum terbongkar pura-pura jadi warga biasa, tapi tidak pernah ikut melawan.
+  const buzzer = coop(s) && !p.buzzer && (s.rahasia.buzzer === botId || role === "buzzer");
+  const kawan = coop(s) && !buzzer;
   // Cadangan supaya tidak bangkrut kena pungli/kebijakan.
   const reserve = 2_500_000 * panik(s);
 
@@ -85,8 +87,20 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
   }
   if (s.phase !== "awaiting_roll" && s.phase !== "awaiting_end") return { type: "end_turn" };
 
+  // Buzzer menyiapkan satu sabotase tiap ronde.
+  if (buzzer && s.rahasia.buzzer === botId && s.rahasia.antre === 0 && s.phase === "awaiting_roll") {
+    return { type: "sabotase" };
+  }
+
+  // Warga jujur menuduh begitu tersisa satu tersangka (dan memberi pemain manusia waktu duluan).
+  if (kawan && !p.sudahTuduh && s.round >= 12) {
+    const tersangka = s.order.filter((id) => id !== botId && !s.players[id].bankrupt && !s.bersih.includes(id));
+    const sudahAda = s.order.some((id) => s.players[id].buzzer);
+    if (tersangka.length === 1 && s.bersih.length > 0 && !sudahAda) return { type: "tuduh", target: tersangka[0] };
+  }
+
   // 0. Jurus profesi begitu terisi. Jalan Tikus (ojol) hanya bisa setelah melempar.
-  if (p.jurus >= R.JURUS_PENUH && (p.profession !== "ojol" || s.phase === "awaiting_end")) {
+  if (!buzzer && p.jurus >= R.JURUS_PENUH && (p.profession !== "ojol" || s.phase === "awaiting_end")) {
     return { type: "jurus" };
   }
 

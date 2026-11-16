@@ -1,0 +1,11 @@
+{
+  "name": "Negeri Wkwk",
+  "short_name": "Negeri Wkwk",
+  "description": "Monopoli rakyat lawan Rezim",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#1e9bf0",
+  "theme_color": "#1e9bf0",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -274,3 +274,73 @@ label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color
 .babak-emoji { font-size: 40px; line-height: 1.1; }
 .babak-nama { font-family: var(--display); font-size: 20px; line-height: 1.1; }
 .skill { display: flex; flex-direction: column; gap: 4px; }
+
+/* ---------- HUD ringkas: papan jadi bintang utama ---------- */
+.hud-top { padding: calc(env(safe-area-inset-top) + 6px) 8px 0; gap: 5px; }
+.toprow { gap: 6px; }
+.icon { width: 34px; height: 34px; border-radius: 11px; font-size: 16px; box-shadow: 0 3px 0 rgba(20,60,110,.25); }
+.chip { padding: 6px 10px; font-size: 12px; box-shadow: 0 3px 0 rgba(20,60,110,.25); }
+.boss { gap: 8px; padding: 5px 9px 6px 5px; border-width: 2px; border-radius: 15px; box-shadow: 0 3px 0 rgba(10,20,50,.35); }
+.boss-face { width: 38px; height: 38px; border-radius: 11px; font-size: 21px; border-width: 2px; }
+.boss-main { gap: 3px; }
+.boss-name { font-family: var(--body); font-weight: 900; font-size: 10.5px; letter-spacing: .02em; opacity: .92; white-space: nowrap; overflow: hidden; }
+.panik { font-size: 9px; padding: 1px 6px; }
+.bar { height: 15px; border-width: 1.5px; }
+.bar b { font-size: 10.5px; }
+.bar.sm { height: 12px; }
+.bar.sm b { font-size: 9px; }
+.bar.sm.hot i { animation: blink .5s infinite alternate; }
+.players { gap: 5px; padding-bottom: 4px; }
+.pchip { gap: 5px; padding: 3px 6px 3px 3px; border-radius: 13px; border-width: 2px; min-width: 76px; box-shadow: 0 3px 0 rgba(20,60,110,.25); }
+.pchip .ava { width: 25px; height: 25px; font-size: 13px; }
+.pname { font-size: 10px; }
+.money { font-size: 11.5px; }
+.pchip.mvp::after { top: -11px; font-size: 13px; }
+.pchip.bersih::before, .pchip.buzzer::before { position: absolute; right: -3px; top: -8px; font-size: 12px; }
+.pchip.bersih::before { content: "✅"; }
+.pchip.buzzer::before { content: "🕵️"; }
+.pchip.buzzer { background: #ffe1e5; }
+.feed { left: 8px; right: 8px; }
+.line { font-size: 11.5px; padding: 4px 11px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(29,34,56,.8); animation: linein .2s, fadeout .4s 2.4s forwards; }
+.float { font-size: 15px; -webkit-text-stroke: 3px #fff; }
+.float.hit { font-size: 24px; }
+.b-title { font-size: clamp(26px, 9vw, 46px); -webkit-text-stroke: 7px var(--ink); }
+.banner.demo .b-title { font-size: clamp(36px, 12vw, 64px); }
+.b-sub { font-size: 12.5px; padding: 5px 13px; margin-top: 7px; max-width: 92vw; }
+.banner { top: 36%; }
+
+.hud-bottom { padding: 0 8px calc(env(safe-area-inset-bottom) + 8px); gap: 6px; }
+.turnpill { background: rgba(255,255,255,.9); border-radius: 999px; padding: 5px 14px; font-size: 12px; box-shadow: 0 3px 0 rgba(20,60,110,.2); margin-bottom: 6px; }
+.hint { font-size: 12px; padding: 6px 12px; border-radius: 13px; box-shadow: 0 3px 0 rgba(20,60,110,.2); }
+.hint.mine { border-width: 2px; }
+.actions { gap: 7px; min-height: 0; }
+.dicebtn { width: 84px; height: 84px; font-size: 14px; border-width: 4px; box-shadow: 0 5px 0 var(--gold-d), 0 9px 14px rgba(0,0,0,.28); }
+.d-icon { font-size: 32px; }
+.side { width: 54px; border-radius: 14px; padding: 5px 2px 4px; box-shadow: 0 4px 0 rgba(20,60,110,.28); }
+.s-icon { font-size: 20px; }
+.s-label { font-size: 10px; }
+.s-sub { font-size: 9.5px; }
+.btn.big { font-size: 18px; padding: 12px 18px; border-radius: 16px; }
+.gauge { padding: 6px; border-radius: 15px; box-shadow: 0 4px 0 rgba(20,60,110,.26); }
+.g-bar { height: 50px; border-radius: 10px; }
+.g-zone { font-size: 13px; }
+.g-zone small { font-size: 9.5px; }
+.g-mutu { font-size: 10px; }
+.g-title { font-size: 10.5px; min-height: 26px; margin-top: 4px; }
+.toast { bottom: 150px; font-size: 12.5px; }
+
+/* ---------- Dadu Nasib ---------- */
+.n-rows { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; text-align: left; }
+.n-row { display: flex; gap: 8px; align-items: center; background: #f1f5fb; border-radius: 11px; padding: 6px 9px; font-weight: 600; font-size: 12.5px; line-height: 1.3; border: 2px solid transparent; transition: opacity .2s, transform .2s; }
+.n-row b { flex: none; width: 42px; text-align: center; font-family: var(--display); font-size: 14px; color: #fff; border-radius: 8px; padding: 3px 0; }
+.n-row:nth-child(1) b { background: var(--green); }
+.n-row:nth-child(2) b { background: #ffa51f; }
+.n-row:nth-child(3) b { background: var(--red); }
+.n-row.lewat { opacity: .35; }
+.n-row.kena { border-color: var(--ink); background: #fff6d6; transform: scale(1.04); }
+.kartu { max-height: 88vh; overflow-y: auto; }
+.k-icon { font-size: 44px; }
+.k-title { font-size: 21px; }
+.k-text { font-size: 13.5px; }
+.dice.ontop { z-index: 60; top: 46%; filter: drop-shadow(0 8px 14px rgba(0,0,0,.45)); }
+.dice.ontop .dice-total { font-size: 28px; }

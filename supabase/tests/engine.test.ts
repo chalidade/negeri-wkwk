@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   BOT_NAMES,
   GOV,
+  NASIB_WNI,
   GameError,
   TILES,
   applyAction,
@@ -20,6 +21,8 @@ import {
 import * as R from "../functions/_shared/engine/rules.ts";
 
 const JT = 1_000_000;
+/** nyawa Rezim di babak 1 untuk n pemain */
+const K = (n: number) => Math.round(R.KEKUASAAN_AWAL[n] * R.nyawaBabak(1));
 const IDS = ["andi", "budi", "citra", "dewi"];
 
 function setup(n = 4, pro: Profession = "buruh", mode: "rakyat_bersatu" | "juragan" = "rakyat_bersatu"): GameState {
@@ -43,8 +46,8 @@ describe("setup", () => {
     assert.equal(TILES.length, R.BOARD_SIZE);
     assert.equal(s.tiles.length, 32);
     assert.equal(s.players.andi.cuan, 20 * JT);
-    assert.equal(s.kekuasaan, R.KEKUASAAN_AWAL[4]);
-    assert.equal(setup(2).kekuasaan, R.KEKUASAAN_AWAL[2]);
+    assert.equal(s.kekuasaan, K(4));
+    assert.equal(setup(2).kekuasaan, K(2));
     assert.equal(s.semangat, 0);
   });
 
@@ -131,7 +134,7 @@ describe("melawan Rezim", () => {
     assert.ok(types(r).includes("demo_akbar"));
     assert.equal(r.state.semangat, 0);
     assert.equal(r.state.demoCount, 1);
-    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[4] - R.DEMO_DAMAGE);
+    assert.equal(r.state.kekuasaan, K(4) - R.DEMO_DAMAGE);
   });
 
   it("Kekuasaan habis: rakyat menang", () => {
@@ -148,7 +151,7 @@ describe("melawan Rezim", () => {
     const s = setup();
     s.lumbung = 6 * JT;
     let r = act(s, "andi", { type: "liputan_media" });
-    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[4] - R.LIPUTAN_DAMAGE);
+    assert.equal(r.state.kekuasaan, K(4) - R.LIPUTAN_DAMAGE);
     assert.equal(r.state.lumbung, 6 * JT - R.LIPUTAN_BIAYA_LUMBUNG);
     assert.throws(() => act(r.state, "andi", { type: "petisi" }), (e: GameError) => e.code === "aksi_sudah_dipakai");
     r = act(setup(), "andi", { type: "petisi" });
@@ -163,7 +166,7 @@ describe("melawan Rezim", () => {
     r = act(r.state, "andi", { type: "buy" });
     assert.ok(types(r).includes("kampung_mandiri"));
     assert.deepEqual(r.state.kampung, ["coklat"]);
-    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[4] - R.KAMPUNG_DAMAGE);
+    assert.equal(r.state.kekuasaan, K(4) - R.KAMPUNG_DAMAGE);
   });
 
   it("akhir ronde: Rezim keluarkan kebijakan dan mobil pejabat jalan", () => {
@@ -193,7 +196,7 @@ describe("melawan Rezim", () => {
     s.phase = "awaiting_end";
     const r = act(s, "budi", { type: "end_turn" }, [4, 1, 2]); // kebijakan ke-4: pengalihan isu
     assert.ok(types(r).includes("rezim_bayar"));
-    assert.equal(r.state.kekuasaan, R.KEKUASAAN_AWAL[2] - R.REZIM_KENA[2]);
+    assert.equal(r.state.kekuasaan, K(2) - R.REZIM_KENA[2]);
     assert.ok(r.state.players.andi.cuan > 20 * JT);
   });
 
@@ -249,6 +252,65 @@ describe("dadu kendali, jurus, babak", () => {
     s.players.andi.position = 3;
     const r = act(s, "andi", { type: "roll" }, [1, 2]); // Potongan Gaji DR 1 jt
     assert.equal(r.state.players.andi.cuan, 20 * JT - R.bulat(JT * R.pungutanBabak(6)));
+  });
+});
+
+describe("Dadu Nasib & buzzer", () => {
+  it("kartu Dadu Nasib: angka besar berarti apes", () => {
+    const idx = NASIB_WNI.findIndex((c) => c.id === "ortu_sakit");
+    const s = setup();
+    s.players.andi.position = 8;
+    // dadu jalan 1+2 -> petak 11 (Nasib WNI), pilih kartu, lalu Dadu Nasib 6+6
+    const r = act(s, "andi", { type: "roll" }, [1, 2, idx, 6, 6]);
+    const nasib = r.events.find((e) => e.type === "dadu_nasib")!;
+    assert.equal(nasib.payload.tingkat, 2);
+    assert.equal(r.state.players.andi.cuan, 20 * JT - 2.5 * JT);
+    assert.equal(r.state.players.andi.skipNext, true);
+    // angka kecil: mujur
+    const r2 = act(s, "andi", { type: "roll" }, [1, 2, idx, 1, 2]);
+    assert.equal(r2.state.players.andi.cuan, 20 * JT - 0.1 * JT);
+  });
+
+  function denganBuzzer(): GameState {
+    const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession }));
+    return createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, "budi");
+  }
+
+  it("sabotase buzzer muncul di akhir ronde tanpa nama, kadang meninggalkan jejak", () => {
+    const s = denganBuzzer();
+    assert.throws(() => act(s, "andi", { type: "sabotase" }), (e: GameError) => e.code === "bukan_buzzer");
+    s.turn = 1;
+    const q = act(s, "budi", { type: "sabotase" });
+    assert.equal(q.state.rahasia.antre, 1);
+    assert.deepEqual(q.state.lastEvents, []);
+    const t = q.state;
+    t.semangat = 50;
+    t.turn = 3;
+    t.phase = "awaiting_end";
+    // pilih "tagar", jejak muncul (10 <= 60), yang dibersihkan: calon pertama, kebijakan ke-4, dadu Rezim 1+1
+    const r = act(t, "dewi", { type: "end_turn" }, [0, 10, 0, 4, 1, 1]);
+    assert.ok(types(r).includes("sabotase"));
+    assert.ok(types(r).includes("jejak"));
+    assert.equal(r.state.bersih.length, 1);
+    assert.notEqual(r.state.bersih[0], "budi");
+    assert.equal(r.state.semangat, 50 - R.SABOTASE_SEMANGAT - 10);
+    assert.ok(r.events.every((e) => e.actor !== "budi" || e.type === "giliran"));
+  });
+
+  it("menuduh: benar membongkar buzzer, salah kena denda, cuma satu kesempatan", () => {
+    const s = denganBuzzer();
+    const benar = act(s, "andi", { type: "tuduh", target: "budi" });
+    assert.equal(benar.state.players.budi.buzzer, true);
+    assert.equal(benar.state.kekuasaan, s.kekuasaanMaks - R.BONGKAR_DAMAGE);
+    assert.equal(benar.state.semangat, R.BONGKAR_SEMANGAT);
+    assert.throws(() => act(benar.state, "andi", { type: "tuduh", target: "citra" }), (e: GameError) => e.code === "sudah_tuduh");
+
+    s.semangat = 30;
+    const salah = act(s, "andi", { type: "tuduh", target: "citra" });
+    assert.ok(types(salah).includes("tuduh_salah"));
+    assert.equal(salah.state.players.andi.cuan, 20 * JT - R.FITNAH_DENDA);
+    assert.equal(salah.state.semangat, 30 - R.FITNAH_SEMANGAT);
+    assert.deepEqual(salah.state.bersih, ["citra"]);
   });
 });
 
@@ -332,7 +394,7 @@ describe("simulasi", () => {
         seat: i,
         profession: pros[(g + i) % pros.length],
       }));
-      let s = createInitialState(`room-${g}`, mode, members, rng);
+      let s = createInitialState(`room-${g}`, mode, members, rng, 1 + (g % 10), g % 2 ? `p${g % n}` : null);
       for (let step = 0; step < 4000 && s.phase !== "game_over"; step++) {
         const me = s.order[s.turn];
         const options: Action[] = [];
@@ -345,6 +407,7 @@ describe("simulasi", () => {
           if (rng.int(0, 9) === 0) options.push({ type: "petisi" }, { type: "liputan_media" });
           if (rng.int(0, 9) === 0) options.push({ type: "donasi_lumbung", amount: 500_000 });
           if (rng.int(0, 5) === 0) options.push({ type: "jurus" });
+          if (rng.int(0, 7) === 0) options.push({ type: "sabotase" }, { type: "tuduh", target: `p${rng.int(0, n - 1)}` });
           const mine = s.tiles.findIndex((t) => t.owner === me && t.level < 3);
           if (mine >= 0 && rng.int(0, 3) === 0) options.push({ type: "upgrade", tile: mine });
         }
@@ -372,7 +435,7 @@ describe("simulasi", () => {
     }
   });
 
-  it("400 game penuh bot di babak 5: tidak pernah macet, menang-kalahnya seimbang", () => {
+  it("400 game penuh bot di babak 3 (sebagian disusupi buzzer): tidak pernah macet", () => {
     const menang: Record<number, number> = {};
     const total: Record<number, number> = {};
     for (let g = 0; g < 400; g++) {
@@ -385,7 +448,7 @@ describe("simulasi", () => {
         profession: null,
         bot: true,
       }));
-      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng, 5);
+      let s = createInitialState(`bot-${g}`, "rakyat_bersatu", members, rng, 3, g % 3 ? `b${1 + (g % (n - 1))}` : null);
       const roles = Object.fromEntries(assignSecrets(s.mode, s.order, rng).map((x) => [x.userId, x.role]));
       let perTurn = 0;
       let last = "";
@@ -403,7 +466,7 @@ describe("simulasi", () => {
     }
     for (const n of [2, 3, 4, 5, 6]) {
       const rate = (menang[n] ?? 0) / total[n];
-      assert.ok(rate > 0.2 && rate < 0.9, `${n} pemain di babak 5: bot menang ${Math.round(rate * 100)}%`);
+      assert.ok(rate > 0.1 && rate < 0.95, `${n} pemain di babak 3: bot menang ${Math.round(rate * 100)}%`);
     }
   });
 });

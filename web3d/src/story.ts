@@ -7,6 +7,7 @@ const ALASAN_TILANG: Record<string, string> = {
   posting_kritik: "gara-gara posting kritik",
   razia: "kena razia dadakan",
   diamankan: "\"diamankan\" aparat",
+  dilaporkan: "dilaporkan buzzer",
 };
 
 export function describe(e: GameEvent, s: GameState, me: string): string | null {
@@ -89,6 +90,14 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
       return `🏚️ ${tile(p.tile)} milik ${name(e.actor)} rusak, turun jadi ${LEVEL_LABEL[Number(p.level)]}`;
     case "lumbung_disunat":
       return `✂️ Lumbung disunat ${dr(p.jumlah)}`;
+    case "sabotase":
+      return "🕵️ Ada buzzer beraksi!";
+    case "jejak":
+      return `🔎 Jejak digital: buzzernya bukan ${name(p.bukan)}`;
+    case "buzzer_terbongkar":
+      return `🕵️ ${name(p.target)} terbongkar sebagai buzzer!`;
+    case "tuduh_salah":
+      return `🙊 ${who} salah menuduh ${name(p.target)}`;
     case "ronde_baru":
       return `🗓️ Ronde ${p.ronde}. Pemilu ${p.sisa} ronde lagi.`;
     default:

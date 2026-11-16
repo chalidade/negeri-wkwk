@@ -1,7 +1,7 @@
 // Engine giliran Negeri Wkwk v2.
 // Fungsi murni: (state, aksi, rng) -> state baru + daftar event.
 // Dipanggil server (main online) dan klien (main solo), jadi aturannya satu sumber.
-import { GRUP_WA, KEBIJAKAN, NASIB_WNI, type CardDef } from "./cards.ts";
+import { GRUP_WA, KEBIJAKAN, NASIB_WNI, jalankanKartu, type CardDef } from "./cards.ts";
 import {
   BANK,
   LUMBUNG,
@@ -53,6 +53,7 @@ export function createInitialState(
   members: MemberInput[],
   rng: Rng,
   level = 1,
+  buzzer: string | null = null,
 ): GameState {
   if (members.length < 2 || members.length > 6) {
     throw new GameError("jumlah_pemain", "Butuh 2 sampai 6 pemain.");
@@ -104,6 +105,8 @@ export function createInitialState(
     lumbung: 0,
     rezimPos: R.BOARD_SIZE / 2,
     kampung: [],
+    bersih: [],
+    rahasia: { buzzer: mode === "rakyat_bersatu" && buzzer && players[buzzer] ? buzzer : null, antre: 0 },
     phase: "awaiting_roll",
     pendingTile: null,
     lastDice: null,
@@ -156,6 +159,16 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
     case "jurus":
       requirePhase(s, "awaiting_roll", "awaiting_end");
       doJurus(ctx, actor);
+      break;
+    case "sabotase":
+      requirePhase(s, "awaiting_roll", "awaiting_end");
+      if (s.rahasia.buzzer !== actor.id || actor.buzzer) throw new GameError("bukan_buzzer", "Aksi tidak dikenal.");
+      if (s.rahasia.antre > 0) throw new GameError("sabotase_antre", "Sabotase ronde ini sudah disiapkan.");
+      s.rahasia.antre = 1; // efeknya baru muncul di akhir ronde, tanpa nama pelaku
+      break;
+    case "tuduh":
+      requirePhase(s, "awaiting_roll", "awaiting_end");
+      doTuduh(ctx, actor, action.target);
       break;
     case "buy":
       requirePhase(s, "awaiting_buy");
@@ -397,9 +410,16 @@ function drawCard(ctx: Ctx, p: PlayerState, deck: CardDef[], deckName: string): 
   emit(ctx, {
     type: "kartu",
     actor: p.id,
-    payload: { dek: deckName, id: card.id, judul: card.judul, teks: card.teks, baik: card.baik },
+    payload: {
+      dek: deckName,
+      id: card.id,
+      judul: card.judul,
+      teks: card.teks,
+      baik: card.baik,
+      nasib: card.nasib?.map((t) => t.teks) ?? null,
+    },
   });
-  card.apply(ctx, p.id);
+  jalankanKartu(ctx, card, p.id);
 }
 
 /** Setelah petak selesai diproses: lempar lagi kalau dadu kembar, atau tunggu akhiri giliran. */
@@ -582,12 +602,15 @@ function rezimTurn(ctx: Ctx): void {
   // Efek giliran Rezim bukan jasa siapa pun, kecuali pemilik usaha yang didatangi pejabat.
   ctx.oleh = null;
 
+  sabotaseBuzzer(ctx);
+  if (isOver(s)) return;
+
   const card = pickRandom(ctx.rng, KEBIJAKAN);
   emit(ctx, {
     type: "kebijakan",
-    payload: { id: card.id, judul: card.judul, teks: card.teks, baik: card.baik, jenis: card.jenis ?? "kebijakan" },
+    payload: { id: card.id, judul: card.judul, teks: card.teks, baik: card.baik, jenis: card.jenis ?? "kebijakan", nasib: card.nasib?.map((t) => t.teks) ?? null },
   });
-  card.apply(ctx, "");
+  jalankanKartu(ctx, card, "");
   if (isOver(s)) return;
   if (!card.meredam) addSemangat(ctx, R.SEMANGAT_KEBIJAKAN, "kebijakan");
   if (isOver(s)) return;
@@ -616,6 +639,65 @@ function rezimTurn(ctx: Ctx): void {
     ctx.oleh = tile.owner;
     hitRezim(ctx, damage, "rezim_mampir");
     ctx.oleh = null;
+  }
+}
+
+/** Sabotase yang disiapkan buzzer muncul di akhir ronde, tanpa nama. Kadang meninggalkan jejak. */
+function sabotaseBuzzer(ctx: Ctx): void {
+  const s = ctx.s;
+  const id = s.rahasia.buzzer;
+  if (s.rahasia.antre === 0 || !id) return;
+  s.rahasia.antre = 0;
+  if (s.players[id].bankrupt || s.players[id].buzzer) return;
+
+  const pilihan: string[] = [];
+  if (s.semangat >= R.SABOTASE_SEMANGAT) pilihan.push("tagar");
+  if (s.lumbung >= 1_500_000) pilihan.push("tilep");
+  const vokal = [...alivePlayers(s)].filter((p) => p.id !== id && p.jailTurns === 0).sort((a, b) => b.jasa - a.jasa)[0];
+  if (vokal && vokal.jasa > 0) pilihan.push("lapor");
+  const jenis = pilihan.length > 0 ? pickRandom(ctx.rng, pilihan) : "tagar";
+
+  if (jenis === "tilep") {
+    const jumlah = transfer(ctx, LUMBUNG, BANK, R.bulat(s.lumbung * R.SABOTASE_LUMBUNG));
+    emit(ctx, { type: "sabotase", payload: { jenis, jumlah } });
+  } else if (jenis === "lapor" && vokal) {
+    emit(ctx, { type: "sabotase", payload: { jenis, korban: vokal.id } });
+    sendToJail(ctx, vokal.id, "dilaporkan");
+  } else {
+    emit(ctx, { type: "sabotase", payload: { jenis: "tagar" } });
+    addSemangat(ctx, -R.SABOTASE_SEMANGAT, "sabotase");
+  }
+
+  // Jejak digital: satu warga yang tidak bersalah terbukti bersih.
+  if (ctx.rng.int(1, 100) > R.PELUANG_JEJAK * 100) return;
+  const calon = alivePlayers(s).filter((p) => p.id !== id && !s.bersih.includes(p.id));
+  if (calon.length === 0) return;
+  const bukan = pickRandom(ctx.rng, calon).id;
+  s.bersih.push(bukan);
+  emit(ctx, { type: "jejak", payload: { bukan } });
+}
+
+/** Menuduh seorang warga sebagai buzzer. Tiap pemain hanya punya satu kesempatan. */
+function doTuduh(ctx: Ctx, p: PlayerState, targetId: string): void {
+  const s = ctx.s;
+  if (!coop(s)) throw new GameError("mode_salah", "Buzzer hanya ada di mode Rakyat Bersatu.");
+  if (p.sudahTuduh) throw new GameError("sudah_tuduh", "Kesempatan menuduhmu sudah terpakai.");
+  const target = s.players[targetId];
+  if (!target || target.id === p.id || target.bankrupt || target.buzzer) {
+    throw new GameError("target_tidak_valid", "Warga itu tidak bisa dituduh.");
+  }
+  p.sudahTuduh = true;
+  if (s.rahasia.buzzer === target.id) {
+    target.buzzer = true;
+    s.rahasia.antre = 0;
+    emit(ctx, { type: "buzzer_terbongkar", actor: p.id, payload: { target: target.id } });
+    addSemangat(ctx, R.BONGKAR_SEMANGAT, "buzzer_terbongkar");
+    hitRezim(ctx, R.BONGKAR_DAMAGE, "buzzer_terbongkar");
+  } else {
+    if (!s.bersih.includes(target.id)) s.bersih.push(target.id);
+    emit(ctx, { type: "tuduh_salah", actor: p.id, payload: { target: target.id } });
+    transfer(ctx, p.id, BANK, Math.min(p.cuan, R.FITNAH_DENDA));
+    addSemangat(ctx, -R.FITNAH_SEMANGAT, "fitnah");
   }
 }
 
