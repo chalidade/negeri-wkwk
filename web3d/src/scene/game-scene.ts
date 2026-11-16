@@ -71,7 +71,7 @@ export class GameScene {
     this.controls.enablePan = false;
     this.controls.minPolarAngle = 0.25;
     this.controls.maxPolarAngle = 1.15;
-    this.controls.target.set(0, 0, 1);
+    this.controls.target.set(0, 0, 2.2);
 
     this.buildWorld();
     this.activeRing = new THREE.Mesh(
@@ -179,7 +179,7 @@ export class GameScene {
       s.add(palm);
     }
     const bajaj = makeBajaj();
-    bajaj.position.set(-5.2, BOARD_TOP, 5.6);
+    bajaj.position.set(-4.2, BOARD_TOP, 7.0);
     bajaj.rotation.y = 0.5;
     bajaj.scale.setScalar(1.3);
     s.add(bajaj);
@@ -190,7 +190,7 @@ export class GameScene {
     );
     for (const x of [-0.75, 0.75]) {
       const die = new THREE.Mesh(new THREE.BoxGeometry(DIE, DIE, DIE), faces);
-      die.position.set(x, BOARD_TOP + DIE / 2, 5.2);
+      die.position.set(x, BOARD_TOP + DIE / 2, 6.6);
       die.castShadow = true;
       this.dice.push(die);
       s.add(die);
@@ -263,7 +263,7 @@ export class GameScene {
         ),
         to: yaw.multiply(topQuaternion(values[i])),
         axis: new THREE.Vector3(Math.random() - 0.5, 0.3, Math.random() - 0.5).normalize(),
-        rest: new THREE.Vector3(i === 0 ? -0.75 : 0.75, BOARD_TOP + DIE / 2, 5.2),
+        rest: new THREE.Vector3(i === 0 ? -0.75 : 0.75, BOARD_TOP + DIE / 2, 6.6),
         start: now + i * 80,
       };
     });
@@ -391,9 +391,12 @@ export class GameScene {
     this.camera.updateProjectionMatrix();
     if (refit) {
       // Jarak kamera supaya papan (lebar ~25 unit) muat di layar, termasuk HP potret.
-      const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
-      const aspect = Math.min(this.camera.aspect, 1.3);
-      const dist = THREE.MathUtils.clamp(13.2 / (Math.tan(halfFov) * aspect), 24, 75);
+      // Papan harus muat secara lebar (HP potret) maupun tinggi (layar lebar),
+      // dengan ruang untuk HUD di atas dan bawah.
+      const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+      const byWidth = 13.8 / (tan * this.camera.aspect);
+      const byHeight = 15.5 / tan;
+      const dist = THREE.MathUtils.clamp(Math.max(byWidth, byHeight), 26, 90);
       const dir = new THREE.Vector3(0, 1.25, 1).normalize();
       this.camera.position.copy(this.controls.target).addScaledVector(dir, dist);
       this.controls.minDistance = dist * 0.45;
