@@ -1,15 +1,11 @@
 name: Web build
 
-# Build versi web aplikasi untuk preview cepat (screenshot, uji di browser).
-# URL dan publishable key di bawah memang boleh publik (aman karena dilindungi RLS).
+# Build versi web 3D (folder web3d/) lalu simpan ke branch web-preview.
+# Vercel men-deploy branch web-preview (folder public/) sebagai production.
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
-env:
-  SUPABASE_URL: https://smvkbqfffynhtejwvkuj.supabase.co
-  SUPABASE_PUBLISHABLE_KEY: sb_publishable_GxiH2VpHQjzFd7HHJ-rDdA_4sCDhh6b
 
 permissions:
   contents: write
@@ -19,35 +15,26 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: app
+        working-directory: web3d
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: actions/setup-node@v4
         with:
-          channel: stable
-          cache: true
-      - name: Siapkan platform web
-        run: flutter create . --platforms=web --project-name negeri_wkwk
-      - run: flutter pub get
-      - name: Build web
-        run: >
-          flutter build web --release --no-web-resources-cdn --base-href /
-          --dart-define=SUPABASE_URL=$SUPABASE_URL
-          --dart-define=SUPABASE_ANON_KEY=$SUPABASE_PUBLISHABLE_KEY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: negeri-wkwk-web
-          path: app/build/web
-          retention-days: 14
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web3d/package-lock.json
+      - run: npm ci
+      - name: Build (type check + Vite)
+        run: npm run build
       - name: Simpan hasil build ke branch web-preview (folder public/ untuk Vercel)
         run: |
           out="$RUNNER_TEMP/web-preview"
           mkdir -p "$out/public"
-          cp -r build/web/. "$out/public/"
+          cp -r dist/. "$out/public/"
           cd "$out"
           git init -q -b web-preview
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Build web dari ${GITHUB_SHA}"
+          git commit -q -m "Build web 3D dari ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" web-preview
