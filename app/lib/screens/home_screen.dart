@@ -112,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Pilih profesi, lalu bikin room atau gabung pakai kode.'),
             const SizedBox(height: 20),
             DropdownButtonFormField<String?>(
-              value: _profession,
+              initialValue: _profession,
               decoration: const InputDecoration(labelText: 'Profesi', border: OutlineInputBorder()),
               items: [
                 const DropdownMenuItem(value: null, child: Text('🎰 Acak')),

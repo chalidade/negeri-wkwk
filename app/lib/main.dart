@@ -8,7 +8,7 @@ import 'screens/login_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (isConfigured) {
-    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+    await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
   }
   runApp(const NegeriWkwkApp());
 }
