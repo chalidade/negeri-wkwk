@@ -89,7 +89,7 @@ class Board3D extends StatelessWidget {
               Positioned(
                 left: 0,
                 right: 0,
-                top: center.dy + cell * 0.6,
+                top: center.dy + cell * 1.55,
                 child: IgnorePointer(
                   child: Center(child: DicePair(values: game.lastDice, size: cell * 1.0)),
                 ),
@@ -365,7 +365,7 @@ class _Tile3D extends StatelessWidget {
     }
 
     final emoji = tile.type == 'property' ? '' : tileEmoji(tile);
-    final nameSize = cell * (_isCorner ? 0.13 : 0.115);
+    final nameSize = cell * (_isCorner ? 0.14 : 0.13);
 
     return Container(
       decoration: BoxDecoration(
