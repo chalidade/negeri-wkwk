@@ -163,7 +163,7 @@ function homeScreen(): void {
         h(
           "div",
           { class: "home-top" },
-          h("div", {}, h("div", { class: "wordmark" }, h("small", {}, "NEGERI"), h("b", {}, "WKWK")), h("div", { class: "tagline" }, "Monopoli rakyat lawan Rezim")),
+          h("div", { class: "judul" }, h("img", { class: "logo-img", src: "/logo.webp", alt: "Negeri Wkwk", width: 1100, height: 547 }), h("div", { class: "tagline" }, "Monopoli rakyat lawan Rezim")),
           h("button", { class: "icon", "aria-label": "Cara main", onclick: () => showHelp() }, ic("tanya")),
         ),
         h(

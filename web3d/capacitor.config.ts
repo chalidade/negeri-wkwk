@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appId: "com.chalidade.negeriwkwk",
   appName: "Negeri Wkwk",
   webDir: "dist",
-  backgroundColor: "#ffc83d",
+  backgroundColor: "#fcb81c",
   android: {
     // tamu dan tuan rumah tersambung lewat WebRTC; konten campuran tidak dipakai
     allowMixedContent: false,

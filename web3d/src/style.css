@@ -463,3 +463,6 @@ label { font-size: 13px; font-weight: 700; color: var(--teks2); }
 .tempel { font: inherit; font-size: 12px; width: 100%; padding: 9px 11px; border-radius: 12px; border: var(--garis); resize: none; user-select: text; -webkit-user-select: text; }
 .sheet.center { align-items: stretch; text-align: center; }
 .sheet.center .sheet-title { justify-content: center; }
+.judul { flex: 1; min-width: 0; }
+.logo-img { display: block; width: 100%; max-width: 330px; height: auto; margin: -6px 0 0 -10px; filter: drop-shadow(0 3px 0 rgba(27,36,64,.12)); }
+.judul .tagline { margin-top: -4px; }

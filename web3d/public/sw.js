@@ -1,7 +1,7 @@
 // Service worker Negeri Wkwk: simpan aset game di HP supaya bisa dibuka tanpa internet
 // (mode main bareng tanpa internet butuh ini). Halaman: coba jaringan dulu, cadangannya simpanan.
 // Aset ber-hash dari Vite: ambil dari simpanan dulu, karena isinya tidak pernah berubah.
-const CACHE = "wkwk-v1";
+const CACHE = "wkwk-v2";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", "/favicon.svg"])).then(() => self.skipWaiting()));
