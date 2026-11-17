@@ -8,7 +8,7 @@ export const JAIL_TILE = 8;
 
 export const START_CUAN = 20_000_000;
 /** Pemilu digelar setelah ronde ini. Kalau Rezim masih berkuasa, rakyat kalah. */
-export const MAX_ROUNDS = 20;
+export const MAX_ROUNDS = 14;
 
 /** Gaji tiap lewat petak Gajian. */
 export const GAJI: Record<Profession, number> = {
@@ -59,7 +59,7 @@ export const JURUS_DAMAGE = 7;
 // --- babak (tingkat kesulitan Rezim)
 export const MAX_BABAK = 10;
 /** Pengali nyawa Rezim per babak. */
-export const nyawaBabak = (level: number): number => 1 + 0.04 * (level - 1);
+export const nyawaBabak = (level: number): number => 1 + 0.018 * (level - 1);
 /** Pengali pungutan Rezim per babak. */
 export const pungutanBabak = (level: number): number => 1 + 0.045 * (level - 1);
 
@@ -103,7 +103,7 @@ export const MAX_DADU_KEMBAR = 3;
 
 // --- Rezim
 /** Nyawa Rezim tergantung jumlah warga: makin ramai, makin kuat Rezimnya. */
-export const KEKUASAAN_AWAL: Record<number, number> = { 2: 96, 3: 138, 4: 172, 5: 212, 6: 250 };
+export const KEKUASAAN_AWAL: Record<number, number> = { 2: 74, 3: 106, 4: 132, 5: 163, 6: 192 };
 /** Kekuasaan tinggal separuh: Rezim panik, semua pungutan dikali PANIK_PENGALI. */
 export const PANIK_DI = 0.5;
 export const PANIK_PENGALI = 1.5;
@@ -147,3 +147,40 @@ export const MIN_PEMAIN_BUZZER = 5;
 export function bulat(n: number): number {
   return Math.round(n / 50_000) * 50_000;
 }
+
+// ---------------------------------------------------------------------------
+// Kas Rezim, pengalihan isu, aparat
+// ---------------------------------------------------------------------------
+
+/** Kas Rezim sebanyak ini per warga = Rezim belanja (menghamburkan uang pajak). */
+export const BELANJA_PER_WARGA = 1_250_000;
+/** Baliho dan iklan pencitraan: kepercayaan publik (Kekuasaan) naik. */
+export const BELANJA_CITRA = 3;
+/** Studi banding ke luar negeri: uang habis, warga makin kesal (Semangat naik). */
+export const BELANJA_KESAL = 6;
+/** Bayar pasukan buzzer: Semangat turun; kalau ada buzzer aktif, Kekuasaan ikut naik. */
+export const BELANJA_BUZZER_SEMANGAT = 8;
+export const BELANJA_BUZZER_CITRA = 2;
+/** Sabotase buzzer "poles citra": kepercayaan ke Rezim naik. */
+export const SABOTASE_CITRA = 3;
+
+/** Semangat setinggi ini di akhir ronde = Rezim mungkin melempar Pengalihan Isu. */
+export const ISU_AMBANG = 70;
+export const ISU_PELUANG = 0.5;
+/** jeda minimal antar pengalihan isu, dalam ronde */
+export const ISU_JEDA = 3;
+/** Semangat yang hilang menurut Dadu Nasib: [tidak terkecoh, teralih, lupa semua] */
+export const ISU_TURUN: [number, number, number] = [-5, 20, 35];
+
+/** Aparat menghadang Demo Akbar. Dadu menentukan: [barikade jebol, ditahan, gas air mata]. */
+export const APARAT_KALI: [number, number, number] = [1.3, 1, 0.6];
+/** Barikade jebol: massa masih panas, Semangat tidak kembali ke nol. */
+export const APARAT_SISA_SEMANGAT = 20;
+
+// ---------------------------------------------------------------------------
+// Mekanik bertahap
+// ---------------------------------------------------------------------------
+
+/** Mekanik yang baru terbuka di babak tertentu, supaya pemain baru tidak langsung kewalahan. */
+export type Fitur = "pelicin" | "aparat" | "pinjol" | "buzzer" | "anggaran";
+export const BABAK_FITUR: Record<Fitur, number> = { pelicin: 2, aparat: 2, pinjol: 3, buzzer: 3, anggaran: 4 };

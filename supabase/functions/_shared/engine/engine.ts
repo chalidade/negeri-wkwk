@@ -1,7 +1,7 @@
 // Engine giliran Negeri Wkwk v2.
 // Fungsi murni: (state, aksi, rng) -> state baru + daftar event.
 // Dipanggil server (main online) dan klien (main solo), jadi aturannya satu sumber.
-import { GRUP_WA, KEBIJAKAN, NASIB_WNI, jalankanKartu, type CardDef } from "./cards.ts";
+import { GRUP_WA, KEBIJAKAN, NASIB_WNI, PENGALIHAN_ISU, jalankanKartu, type CardDef } from "./cards.ts";
 import {
   BANK,
   LUMBUNG,
@@ -10,6 +10,7 @@ import {
   addSemangat,
   alivePlayers,
   biayaUpgrade,
+  butuh,
   cekKampung,
   coop,
   currentPlayer,
@@ -25,6 +26,7 @@ import {
   omzetUsaha,
   pickRandom,
   pungliAset,
+  punya,
   pungut,
   sendToJail,
   sewaUsaha,
@@ -59,6 +61,8 @@ export function createInitialState(
   level = 1,
   buzzer: string | null = null,
   rekrut = false,
+  /** true = semua mekanik aktif tanpa menunggu babak (dipakai room online) */
+  lengkap = false,
 ): GameState {
   if (members.length < 2 || members.length > 6) {
     throw new GameError("jumlah_pemain", "Butuh 2 sampai 6 pemain.");
@@ -92,6 +96,7 @@ export function createInitialState(
   }
 
   const babak = Math.max(1, Math.min(R.MAX_BABAK, Math.round(level)));
+  const adaBuzzer = lengkap || babak >= R.BABAK_FITUR.buzzer;
   const nyawa = Math.round(R.KEKUASAAN_AWAL[sorted.length] * R.nyawaBabak(babak));
   return {
     schema: 3,
@@ -114,10 +119,11 @@ export function createInitialState(
     bersih: [],
     jejak: {},
     rahasia: {
-      buzzer: mode === "rakyat_bersatu" && buzzer && players[buzzer] ? buzzer : null,
+      buzzer: mode === "rakyat_bersatu" && adaBuzzer && buzzer && players[buzzer] ? buzzer : null,
       antre: 0,
-      rekrut: mode === "rakyat_bersatu" && rekrut && !buzzer,
+      rekrut: mode === "rakyat_bersatu" && adaBuzzer && rekrut && !buzzer,
     },
+    ...(lengkap ? { lengkap: true } : {}),
     phase: "awaiting_roll",
     sidang: null,
     pendingTile: null,
@@ -472,6 +478,7 @@ function finishResolution(ctx: Ctx): void {
 // ---------------------------------------------------------------------------
 
 function doBuy(ctx: Ctx, p: PlayerState, jalur: Jalur = "resmi"): void {
+  if (jalur === "pelicin") butuh(ctx.s, "pelicin", "Uang pelicin");
   const s = ctx.s;
   const idx = s.pendingTile!;
   const tile = s.tiles[idx];
@@ -491,6 +498,7 @@ function doBuy(ctx: Ctx, p: PlayerState, jalur: Jalur = "resmi"): void {
 }
 
 function doPayFine(ctx: Ctx, p: PlayerState, jalur: Jalur = "resmi"): void {
+  if (jalur === "pelicin") butuh(ctx.s, "pelicin", "Damai di tempat");
   if (p.jailTurns === 0) throw new GameError("tidak_ditilang", "Kamu nggak lagi ditilang.");
   // "Damai di tempat": separuh harga, tapi kalau ketahuan malah tambah parah.
   const fine = R.bulat(R.DENDA_TILANG * (jalur === "pelicin" ? 0.5 : 1));
@@ -505,6 +513,7 @@ function doPayFine(ctx: Ctx, p: PlayerState, jalur: Jalur = "resmi"): void {
 
 function doUpgrade(ctx: Ctx, p: PlayerState, idx: number, jalur: Jalur = "resmi"): void {
   const s = ctx.s;
+  if (jalur === "pelicin") butuh(s, "pelicin", "Uang pelicin");
   const def = TILES[idx];
   if (!def || def.type !== "property") throw new GameError("bukan_usaha", "Petak ini bukan usaha.");
   const tile = s.tiles[idx];
@@ -522,6 +531,7 @@ function doUpgrade(ctx: Ctx, p: PlayerState, idx: number, jalur: Jalur = "resmi"
 
 /** Pinjol: uang cair seketika, utang langsung ditambah bunga, lalu berbunga lagi tiap ronde. */
 function doPinjol(ctx: Ctx, p: PlayerState, amount: number): void {
+  butuh(ctx.s, "pinjol", "Pinjol");
   if (!Number.isInteger(amount) || amount < 1_000_000 || amount % 500_000 !== 0) {
     throw new GameError("jumlah_tidak_valid", "Pinjaman minimal DR 1 jt, kelipatan DR 500 rb.");
   }
@@ -543,6 +553,7 @@ function doBayarUtang(ctx: Ctx, p: PlayerState, amount: number): void {
 /** Gotong royong: bantu warga lain. Uangnya melunasi utang pinjolnya dulu, sisanya jadi pegangan. */
 function doBantu(ctx: Ctx, p: PlayerState, targetId: string, amount: number): void {
   const s = ctx.s;
+  butuh(s, "pinjol", "Bantu warga");
   const target = s.players[targetId];
   if (!target || target.id === p.id || target.bankrupt) throw new GameError("target_tidak_valid", "Warga itu tidak bisa dibantu.");
   if (!Number.isInteger(amount) || amount <= 0 || amount > p.cuan) throw new GameError("uang_kurang", "Uangmu nggak cukup.");
@@ -698,7 +709,11 @@ function rezimTurn(ctx: Ctx): void {
   sabotaseBuzzer(ctx);
   if (isOver(s)) return;
 
-  const card = pickRandom(ctx.rng, KEBIJAKAN);
+  // Semangat sudah tinggi? Rezim bisa melempar Pengalihan Isu sebagai ganti Kebijakan ronde ini.
+  const alihkan =
+    coop(s) && punya(s, "anggaran") && s.semangat >= R.ISU_AMBANG && s.round - (s.isu ?? -99) >= R.ISU_JEDA && ctx.rng.int(1, 100) <= R.ISU_PELUANG * 100;
+  if (alihkan) s.isu = s.round;
+  const card = alihkan ? PENGALIHAN_ISU : pickRandom(ctx.rng, KEBIJAKAN);
   emit(ctx, {
     type: "kebijakan",
     payload: { id: card.id, judul: card.judul, teks: card.teks, baik: card.baik, jenis: card.jenis ?? "kebijakan", nasib: card.nasib?.map((t) => t.teks) ?? null },
@@ -706,6 +721,9 @@ function rezimTurn(ctx: Ctx): void {
   jalankanKartu(ctx, card, "");
   if (isOver(s)) return;
   if (!card.meredam) addSemangat(ctx, R.SEMANGAT_KEBIJAKAN, "kebijakan");
+  if (isOver(s)) return;
+
+  belanjaRezim(ctx);
   if (isOver(s)) return;
 
   const dadu: [number, number] = [ctx.rng.int(1, 6), ctx.rng.int(1, 6)];
@@ -735,6 +753,30 @@ function rezimTurn(ctx: Ctx): void {
   }
 }
 
+/**
+ * Kas Rezim berasal dari pungutan warga (pajak, pungli, denda, uang pelicin). Begitu cukup tebal,
+ * uangnya dihambur-hamburkan: sebagian jadi pencitraan yang memperkuat Rezim, sebagian murni terbuang.
+ */
+/** Pencitraan diskalakan dengan jumlah pemain (angka dasar untuk 4 pemain), minimal 1. */
+const citra = (s: GameState, dasar: number): number => Math.max(1, Math.round((dasar * s.order.length) / 4));
+
+function belanjaRezim(ctx: Ctx): void {
+  const s = ctx.s;
+  if (!coop(s) || !punya(s, "anggaran")) return;
+  const biaya = R.BELANJA_PER_WARGA * s.order.length;
+  if ((s.kas ?? 0) < biaya) return;
+  s.kas = (s.kas ?? 0) - biaya;
+  const acak = ctx.rng.int(1, 100);
+  const buzzerAktif = !!s.rahasia.buzzer && !s.players[s.rahasia.buzzer].buzzer && !s.players[s.rahasia.buzzer].bankrupt;
+  const jenis = acak <= 35 ? "studi_banding" : acak <= 65 ? "baliho" : acak <= 85 ? "bayar_buzzer" : "rumah_dinas";
+  emit(ctx, { type: "belanja_rezim", payload: { jenis, biaya, sisa: s.kas } });
+  if (jenis === "baliho") healRezim(ctx, citra(s, R.BELANJA_CITRA), "pencitraan");
+  else if (jenis === "bayar_buzzer") {
+    addSemangat(ctx, -R.BELANJA_BUZZER_SEMANGAT, "buzzer_bayaran");
+    if (buzzerAktif) healRezim(ctx, citra(s, R.BELANJA_BUZZER_CITRA), "pencitraan");
+  } else addSemangat(ctx, jenis === "studi_banding" ? R.BELANJA_KESAL : Math.round(R.BELANJA_KESAL / 2), "anggaran_bocor");
+}
+
 /** Sabotase yang disiapkan buzzer muncul di akhir ronde, tanpa nama. Kadang meninggalkan jejak. */
 function sabotaseBuzzer(ctx: Ctx): void {
   const s = ctx.s;
@@ -748,11 +790,16 @@ function sabotaseBuzzer(ctx: Ctx): void {
   if (s.lumbung >= 1_500_000) pilihan.push("tilep");
   const vokal = [...alivePlayers(s)].filter((p) => p.id !== id && p.jailTurns === 0).sort((a, b) => b.jasa - a.jasa)[0];
   if (vokal && vokal.jasa > 0) pilihan.push("lapor");
-  const jenis = pilihan.length > 0 ? pickRandom(ctx.rng, pilihan) : "tagar";
+  // memoles citra Rezim selalu bisa: kepercayaan publik naik pelan-pelan selama buzzer belum ketahuan
+  pilihan.push("citra");
+  const jenis = pickRandom(ctx.rng, pilihan);
 
   if (jenis === "tilep") {
     const jumlah = transfer(ctx, LUMBUNG, BANK, R.bulat(s.lumbung * R.SABOTASE_LUMBUNG));
     emit(ctx, { type: "sabotase", payload: { jenis, jumlah } });
+  } else if (jenis === "citra") {
+    emit(ctx, { type: "sabotase", payload: { jenis, naik: citra(s, R.SABOTASE_CITRA) } });
+    healRezim(ctx, citra(s, R.SABOTASE_CITRA), "pencitraan");
   } else if (jenis === "lapor" && vokal) {
     emit(ctx, { type: "sabotase", payload: { jenis, korban: vokal.id } });
     sendToJail(ctx, vokal.id, "dilaporkan");
@@ -776,7 +823,7 @@ function sabotaseBuzzer(ctx: Ctx): void {
  */
 function rekrutBuzzer(ctx: Ctx): void {
   const s = ctx.s;
-  if (!s.rahasia.rekrut || s.rahasia.buzzer || s.round < 2) return;
+  if (!s.rahasia.rekrut || s.rahasia.buzzer || s.round < 2 || !punya(s, "buzzer")) return;
   if (ctx.rng.int(1, 100) > R.PELUANG_REKRUT * 100) return;
   // Hanya bot yang bisa disuap; pemain manusia tidak pernah diubah perannya diam-diam.
   const calon = alivePlayers(s).filter((p) => p.bot && !s.bersih.includes(p.id)).sort((a, b) => a.cuan - b.cuan);
@@ -797,6 +844,7 @@ function rekrutBuzzer(ctx: Ctx): void {
 function doSidang(ctx: Ctx, p: PlayerState): void {
   const s = ctx.s;
   if (!coop(s)) throw new GameError("mode_salah", "Sidang Warga hanya ada di mode Rakyat Bersatu.");
+  butuh(s, "buzzer", "Sidang Warga");
   if (p.sudahSidang) throw new GameError("sudah_sidang", "Kamu sudah pernah memanggil Sidang Warga.");
   const hidup = alivePlayers(s);
   if (hidup.length < 3) throw new GameError("warga_kurang", "Sidang butuh minimal 3 warga.");

@@ -1,26 +1,43 @@
 // "Cara Main": lima kartu singkat. Muncul otomatis di game pertama.
 import { h, modal } from "./dom.ts";
 import { ic, rezimAva } from "./icons.ts";
+import { BABAK_FITUR, MAX_ROUNDS, type Fitur } from "./shared.ts";
 import { sfx } from "./sfx.ts";
 
-const SLIDES: [string, string, string][] = [
-  ["rezim", "Tumbangkan Rezim", "Semua warga satu tim. Habiskan Kekuasaan Rezim (batang merah di atas) sebelum Pemilu di ronde 20. Kalau telat, Rezim menang lagi."],
+/** Slide dasar: cukup ini untuk mulai main. Sisanya dijelaskan lewat tips saat kejadiannya muncul. */
+const DASAR: [string, string, string][] = [
+  ["rezim", "Tumbangkan Rezim", `Semua warga satu tim. Habiskan Kekuasaan Rezim (batang merah di atas) sebelum Pemilu di ronde ${MAX_ROUNDS}. Kalau telat, Rezim menang lagi.`],
   ["dadu", "Tahan dadu, atur tenaga", "Tahan tombol dadu, lalu lepas di Pelan, Sedang, atau Kencang. Petak yang menyala itu tempat kamu bisa mendarat: incar usaha kosong, hindari pungli."],
-  ["toko", "Cari duit dulu", "Beli usaha. Tiap lewat petak Gajian kamu dapat gaji ditambah omzet semua usahamu."],
-  ["naik", "Upgrade usaha", "Mendarat lagi di usahamu sendiri, kamu langsung ditawari upgrade. Bisa juga ketuk panah kuning yang melayang di atas usahamu, kapan saja di giliranmu."],
-  ["toa", "Isi Semangat Demo", "Beli usaha, bikin petisi, bahkan kena pungli bikin warga makin marah. Massa berkumpul di depan Istana. Batang kuning penuh berarti Demo Akbar, dan Kekuasaan Rezim rontok."],
+  ["toko", "Beli usaha, lalu upgrade", "Tiap lewat petak Gajian kamu dapat gaji ditambah omzet semua usahamu. Mendarat lagi di usahamu, atau ketuk panah kuning di atasnya, buat upgrade."],
+  ["toa", "Isi Semangat Demo", "Beli usaha, bikin petisi, bahkan kena pungli bikin warga makin marah dan massa berkumpul di depan Istana. Batang kuning penuh berarti Demo Akbar: Kekuasaan Rezim rontok."],
+];
+
+/** Mekanik yang terbuka bertahap. Dikenalkan lewat kartu "Baru di babak ini". */
+export const FITUR_BARU: { fitur: Fitur; ikon: string; judul: string; isi: string }[] = [
+  { fitur: "pelicin", ikon: "tangan", judul: "Uang pelicin", isi: "Beli dan upgrade bisa lewat jalur pelicin: lebih murah, tapi 1 dari 4 kena OTT (denda dan ditahan), dan tiap suap bikin Rezim pulih." },
+  { fitur: "aparat", ikon: "dadu", judul: "Aparat menghadang demo", isi: "Hasil Demo Akbar ditentukan dadu: angka kecil barikade jebol, angka besar massa dibubarkan gas air mata dan satu warga diamankan." },
+  { fitur: "pinjol", ikon: "pinjol", judul: "Pinjol dan bantu warga", isi: "Kepepet? Pinjol cair seketika, tapi bunganya 20% di depan dan 10% tiap ronde. Warga lain bisa bantu melunasi lewat tombol Aksi." },
+  { fitur: "buzzer", ikon: "kaca", judul: "Buzzer dan Sidang Warga", isi: "Rezim bisa menyuap satu warga. Dia main seperti biasa tapi diam-diam menyabotase. Curiga? Panggil Sidang Warga: suara terbanyak diusir." },
+  { fitur: "anggaran", ikon: "uang", judul: "Anggaran dan pengalihan isu", isi: "Pungutan yang kamu bayar masuk Kas Rezim, lalu dihamburkan jadi pencitraan. Semangat tinggi di akhir ronde bisa digembosi Pengalihan Isu." },
+];
+
+const LAINNYA: [string, string, string][] = [
   ["petir", "Jurus profesi", "Tiap profesi punya jurus pamungkas yang terisi tiap beberapa giliran. Pakai lewat tombol Aksi di saat yang pas, lalu rebut gelar MVP."],
-  ["mobil", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan ngawur, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
-  ["kartu", "Dadu Nasib", "Sebagian kartu dan bencana ditentukan lemparan dadu: angka kecil mujur, angka besar apes. Kamu sendiri yang melempar."],
-  ["kaca", "Awas buzzer", "Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer main seperti warga biasa, tapi diam-diam menyabotase. Jejak digital sering mengarah ke dia, tapi bisa dipalsukan. Kalau curiga, panggil Sidang Warga lewat tombol Aksi: semua memilih, suara terbanyak diusir. Salah usir, hartanya disita Rezim."],
-  ["tangan", "Resmi atau pelicin", "Buka dan upgrade usaha lewat jalur resmi itu aman tapi mahal. Uang pelicin lebih murah, tapi 1 dari 4 kena OTT (denda dan ditahan), dan tiap suap bikin Rezim pulih."],
-  ["pinjol", "Pinjol dan gotong royong", "Kepepet? Pinjol cair seketika, tapi bunganya 20% di depan dan 10% tiap ronde. Warga lain bisa bantu melunasi lewat tombol Aksi."],
+  ["mobil", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
+  ["kartu", "Dadu Nasib", "Sebagian kartu dan bencana ditentukan lemparan dadu: angka kecil mujur, angka besar apes."],
   ["karung", "Saling jaga", "Lumbung Bersama otomatis menalangi warga yang nggak sanggup bayar. Kalau 2 warga bangkrut, semua kalah."],
 ];
 
-export const HELP_SEEN = "wkwk.help.v4";
+export const HELP_SEEN = "wkwk.help.v5";
 
-export function showHelp(onDone?: () => void): void {
+/**
+ * "Cara main". `ringkas`: hanya slide dasar (dipakai sebelum game pertama).
+ * Dari tombol tanya di beranda: semua slide, termasuk mekanik yang baru terbuka di babak lanjut.
+ */
+export function showHelp(onDone?: () => void, ringkas = false): void {
+  const SLIDES: [string, string, string][] = ringkas
+    ? DASAR
+    : [...DASAR, ...LAINNYA, ...FITUR_BARU.map((f): [string, string, string] => [f.ikon, `${f.judul} (babak ${BABAK_FITUR[f.fitur]})`, f.isi])];
   let i = 0;
   const icon = h("div", { class: "help-icon" });
   const title = h("div", { class: "sheet-title" });
@@ -33,7 +50,7 @@ export function showHelp(onDone?: () => void): void {
     title.textContent = t;
     text.textContent = body;
     dots.replaceChildren(...SLIDES.map((_, k) => h("i", { class: k === i ? "on" : "" })));
-    next.textContent = i === SLIDES.length - 1 ? "Gas main" : "Lanjut";
+    next.textContent = i === SLIDES.length - 1 ? (ringkas ? "Gas main" : "Tutup") : "Lanjut";
   };
   next.onclick = () => {
     sfx.click();
@@ -44,7 +61,7 @@ export function showHelp(onDone?: () => void): void {
   };
   render();
   const close = modal(h("div", { class: "sheet col help" }, icon, title, text, dots, next), () => {
-    localStorage.setItem(HELP_SEEN, "1");
+    if (ringkas) localStorage.setItem(HELP_SEEN, "1");
     onDone?.();
   });
 }

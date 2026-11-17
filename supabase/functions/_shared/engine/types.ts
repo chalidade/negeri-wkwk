@@ -130,6 +130,12 @@ export interface GameState {
   };
   /** grup warna yang sudah pernah jadi Kampung Mandiri */
   kampung: string[];
+  /** semua mekanik aktif tanpa melihat babak (room online) */
+  lengkap?: boolean;
+  /** Kas Rezim: semua pungutan dari warga terkumpul di sini, lalu dihambur-hamburkan */
+  kas?: number;
+  /** ronde terakhir Rezim melempar Pengalihan Isu */
+  isu?: number;
   phase: Phase;
   sidang: Sidang | null;
   pendingTile: number | null;

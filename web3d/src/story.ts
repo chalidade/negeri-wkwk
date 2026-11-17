@@ -66,7 +66,9 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
     case "liputan_media":
       return `📰 ${who} mendanai Liputan Media: Kekuasaan −${p.damage}`;
     case "demo_akbar":
-      return `✊ DEMO AKBAR ke-${p.ke}! Kekuasaan Rezim −${p.damage}`;
+      return `DEMO AKBAR ke-${p.ke}! ${["Barikade jebol. ", "Massa ditahan aparat. ", "Dibubarkan gas air mata. "][Number(p.tingkat ?? -1)] ?? ""}Kekuasaan Rezim −${p.damage}`;
+    case "belanja_rezim":
+      return `Rezim menghamburkan ${dr(p.biaya)} uang pajak`;
     case "kampung_mandiri":
       return `🏘️ Kampung Mandiri! Satu warna dikuasai rakyat: Kekuasaan −${p.damage}`;
     case "rezim_panik":
@@ -104,7 +106,7 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
     case "bantu":
       return `🤝 ${who} membantu ${name(p.target)} ${dr(p.jumlah)}`;
     case "sabotase":
-      return "🕵️ Ada buzzer beraksi!";
+      return p.jenis === "citra" ? "Buzzer memoles citra Rezim" : "Ada buzzer beraksi!";
     case "jejak":
       return `🔎 Jejak digital mengarah ke ${name(p.ke)}`;
     case "sidang_dibuka":

@@ -12,6 +12,7 @@ export {
   omzetUsaha,
   panik,
   pungliAset,
+  punya,
   sewaUsaha,
 } from "./core.ts";
 export { GRUP_WA, KEBIJAKAN, NASIB_WNI } from "./cards.ts";

@@ -418,15 +418,28 @@ export const KEBIJAKAN: CardDef[] = [
     apply: (ctx) => semuaBayar(ctx, () => 0.6 * JT),
   },
   {
-    id: "pengalihan_isu",
-    judul: "Pengalihan Isu",
-    teks: "Tiba-tiba ada skandal artis. Semangat Demo turun.",
+    id: "pajak_dadakan",
+    judul: "Tambal Defisit",
+    teks: "Anggaran jebol gara-gara proyek dan perjalanan dinas. Solusinya: pajak baru. Lempar Dadu Nasib.",
     baik: false,
     meredam: true,
-    apply: (ctx) => {
-      if (coop(ctx.s)) addSemangat(ctx, -10, "pengalihan_isu");
-      else semuaBayar(ctx, () => 0.4 * JT);
-    },
+    nasib: [
+      { teks: "Diprotes ramai-ramai sampai dibatalkan. Semangat Demo naik.", apply: (ctx) => addSemangat(ctx, 8, "pajak_batal") },
+      {
+        teks: "Lolos: semua warga bayar 5% dari uangnya (minimal DR 400 rb).",
+        apply: (ctx) => {
+          semuaBayar(ctx, (id) => Math.max(0.4 * JT, player(ctx.s, id).cuan * 0.05));
+          addSemangat(ctx, R.SEMANGAT_KEBIJAKAN, "kebijakan");
+        },
+      },
+      {
+        teks: "Lolos, tarifnya dobel: semua warga bayar 10% dari uangnya (minimal DR 700 rb).",
+        apply: (ctx) => {
+          semuaBayar(ctx, (id) => Math.max(0.7 * JT, player(ctx.s, id).cuan * 0.1));
+          addSemangat(ctx, R.SEMANGAT_KEBIJAKAN * 2, "kebijakan");
+        },
+      },
+    ],
   },
   {
     id: "bansos_politik",
@@ -673,3 +686,20 @@ export const KEBIJAKAN: CardDef[] = [
     ],
   },
 ];
+
+/**
+ * Pengalihan Isu: bukan kartu acak. Rezim melemparnya kalau Semangat Demo sudah tinggi di akhir
+ * ronde, menggantikan Kebijakan ronde itu. Dadu Nasib menentukan seberapa warga terkecoh.
+ */
+export const PENGALIHAN_ISU: CardDef = {
+  id: "pengalihan_isu",
+  judul: "Pengalihan Isu",
+  teks: "Demo hampir pecah, tiba-tiba linimasa penuh skandal artis. Lempar Dadu Nasib.",
+  baik: false,
+  meredam: true,
+  nasib: [
+    { teks: "Warga nggak terkecoh, malah makin kesal. Semangat Demo naik.", apply: (ctx) => addSemangat(ctx, -R.ISU_TURUN[0], "isu_gagal") },
+    { teks: `Linimasa teralih. Semangat Demo turun ${R.ISU_TURUN[1]}.`, apply: (ctx) => addSemangat(ctx, -R.ISU_TURUN[1], "pengalihan_isu") },
+    { teks: `Semua sibuk bahas gosip. Semangat Demo turun ${R.ISU_TURUN[2]}.`, apply: (ctx) => addSemangat(ctx, -R.ISU_TURUN[2], "pengalihan_isu") },
+  ],
+};

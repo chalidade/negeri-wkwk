@@ -2,7 +2,7 @@
 import board from "../board.json" with { type: "json" };
 import * as R from "./rules.ts";
 import type { GameEvent, GameResult, GameState, Jalur, PlayerState, Rng, TileDef } from "./types.ts";
-import { GOV } from "./types.ts";
+import { GOV, GameError } from "./types.ts";
 
 export const TILES: TileDef[] = (board as { tiles: TileDef[] }).tiles;
 export const GROUPS: string[] = [...new Set(TILES.filter((t) => t.group).map((t) => t.group!))];
@@ -27,6 +27,11 @@ export const BANK = "bank";
 export const LUMBUNG = "lumbung";
 
 export const coop = (s: GameState): boolean => s.mode === "rakyat_bersatu";
+/** Apakah mekanik ini sudah terbuka di permainan ini (bertahap per babak). */
+export const punya = (s: GameState, f: R.Fitur): boolean => !!s.lengkap || s.level >= R.BABAK_FITUR[f];
+export function butuh(s: GameState, f: R.Fitur, nama: string): void {
+  if (!punya(s, f)) throw new GameError("belum_terbuka", `${nama} baru terbuka di babak ${R.BABAK_FITUR[f]}.`);
+}
 
 /** Pengali pungutan Rezim: naik saat Rezim panik. */
 export function panik(s: GameState): number {
@@ -97,7 +102,8 @@ export function transfer(ctx: Ctx, from: Party, to: Party, amount: number): numb
   }
 
   if (to === LUMBUNG) s.lumbung += paid;
-  else if (to !== BANK && to !== GOV) {
+  else if (to === GOV) s.kas = (s.kas ?? 0) + paid;
+  else if (to !== BANK) {
     const p = player(s, to);
     if (!p.bankrupt) p.cuan += paid;
   }
@@ -213,14 +219,36 @@ export function addSemangat(ctx: Ctx, delta: number, alasan: string, perGiliran 
   if (s.semangat === dari) return;
   if (d > 0) jasa(ctx, ctx.oleh, d);
   emit(ctx, { type: "semangat", payload: { dari, ke: s.semangat, alasan } });
-  if (s.semangat >= R.SEMANGAT_PENUH) {
-    const mahasiswa = alivePlayers(s).filter((p) => p.profession === "mahasiswa").length;
-    const damage = R.DEMO_DAMAGE + mahasiswa * R.MAHASISWA_BONUS_DEMO;
+  if (s.semangat >= R.SEMANGAT_PENUH) demoAkbar(ctx);
+}
+
+/**
+ * Demo Akbar. Aparat menghadang di depan Istana, dan dua dadu menentukan hasilnya:
+ * 2-5 barikade jebol (pukulan lebih keras, massa masih panas), 6-8 massa ditahan (pukulan biasa),
+ * 9-12 dibubarkan gas air mata (pukulan lemah, satu warga "diamankan").
+ */
+function demoAkbar(ctx: Ctx): void {
+  const s = ctx.s;
+  const mahasiswa = alivePlayers(s).filter((p) => p.profession === "mahasiswa").length;
+  const dasar = R.DEMO_DAMAGE + mahasiswa * R.MAHASISWA_BONUS_DEMO;
+  s.demoCount += 1;
+  if (!punya(s, "aparat")) {
+    // babak awal: belum ada aparat, demo selalu memukul penuh
     s.semangat = 0;
-    s.demoCount += 1;
-    emit(ctx, { type: "demo_akbar", payload: { damage, ke: s.demoCount } });
-    hitRezim(ctx, damage, "demo_akbar");
+    emit(ctx, { type: "demo_akbar", payload: { damage: dasar, dasar, ke: s.demoCount, dadu: null, tingkat: null, ditahan: null, sisa: 0 } });
+    return hitRezim(ctx, dasar, "demo_akbar");
   }
+  const dadu: [number, number] = [ctx.rng.int(1, 6), ctx.rng.int(1, 6)];
+  const jumlah = dadu[0] + dadu[1];
+  const tingkat = jumlah <= 5 ? 0 : jumlah <= 8 ? 1 : 2;
+  const damage = Math.round(dasar * R.APARAT_KALI[tingkat]);
+  s.semangat = tingkat === 0 ? R.APARAT_SISA_SEMANGAT : 0;
+  // yang "diamankan": warga acak yang masih bebas
+  const bebas = alivePlayers(s).filter((p) => p.jailTurns === 0);
+  const ditahan = tingkat === 2 && bebas.length > 0 ? pickRandom(ctx.rng, bebas).id : null;
+  emit(ctx, { type: "demo_akbar", payload: { damage, dasar, ke: s.demoCount, dadu, tingkat, ditahan, sisa: s.semangat } });
+  hitRezim(ctx, damage, "demo_akbar");
+  if (ditahan && !isOver(s)) sendToJail(ctx, ditahan, "demo");
 }
 
 /** Pungutan ke Rezim (pajak, pungli, kebijakan). Mengembalikan jumlah yang dibayar. */

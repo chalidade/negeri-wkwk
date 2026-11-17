@@ -1,7 +1,7 @@
 // Otak bot. Fungsi murni: lihat state, pilih SATU aksi.
 // Dipanggil berulang-ulang sampai giliran bot selesai, satu aksi per panggilan,
 // supaya klien sempat menganimasikan tiap langkah.
-import { TILES, biayaUpgrade, coop, hargaBeli, kampungMandiri, panik } from "./core.ts";
+import { TILES, biayaUpgrade, coop, hargaBeli, kampungMandiri, panik, punya } from "./core.ts";
 import * as R from "./rules.ts";
 import { GOV, type Action, type Gaya, type GameState, type PlayerSecret } from "./types.ts";
 
@@ -88,18 +88,19 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
     const idx = s.pendingTile ?? -1;
     // Buzzer selalu main pelicin (itu menyuburkan Rezim). Warga jujur baru nyogok kalau kepepet.
     // Buzzer sesekali main pelicin (itu menyuburkan Rezim), tapi tidak selalu, supaya tidak kentara.
-    if (buzzer && (s.round + p.seat) % 3 === 0 && p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) {
+    const pelicin = punya(s, "pelicin");
+    if (pelicin && buzzer && (s.round + p.seat) % 3 === 0 && p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) {
       return { type: "buy", jalur: "pelicin" };
     }
     if (p.cuan - hargaBeli(s, idx) >= reserve) return { type: "buy" };
-    if (p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) return { type: "buy", jalur: "pelicin" };
+    if (pelicin && p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) return { type: "buy", jalur: "pelicin" };
     return { type: "skip_buy" };
   }
   if (s.phase !== "awaiting_roll" && s.phase !== "awaiting_end") return { type: "end_turn" };
 
   // Sidang Warga: warga jujur memanggil kalau jejak ke satu orang sudah menumpuk.
   // Buzzer juga bisa memanggil, untuk menjebak warga yang kebetulan kena jejak palsu.
-  if (coop(s) && !p.sudahSidang && s.round >= 5 && s.phase === "awaiting_roll") {
+  if (coop(s) && punya(s, "buzzer") && !p.sudahSidang && s.round >= 4 && s.phase === "awaiting_roll") {
     const lain = s.order.map((id) => s.players[id]).filter((x) => x.id !== botId && !x.bankrupt);
     const puncak = Math.max(0, ...lain.map((x) => s.jejak[x.id] ?? 0));
     if (lain.length >= 2 && puncak >= (buzzer ? 2 : 3)) return { type: "sidang" };
@@ -145,10 +146,10 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
 
   // 4. Pinjol: lunasi begitu longgar, pinjam hanya kalau benar-benar bokek.
   if (p.utang > 0 && p.cuan - p.utang >= reserve * 1.5) return { type: "bayar_utang", amount: p.utang };
-  if (p.cuan < 600_000 && p.utang === 0) return { type: "pinjol", amount: 2_000_000 };
+  if (punya(s, "pinjol") && p.cuan < 600_000 && p.utang === 0) return { type: "pinjol", amount: 2_000_000 };
 
   // 5. Gotong royong: yang longgar membantu warga yang terlilit utang.
-  if ((kawan || purapura) && !s.sudahBantu && p.cuan >= reserve * 4) {
+  if (punya(s, "pinjol") && (kawan || purapura) && !s.sudahBantu && p.cuan >= reserve * 4) {
     const susah = s.order.map((id) => s.players[id]).find((x) => x.id !== botId && !x.bankrupt && x.utang >= 1_000_000);
     if (susah) return { type: "bantu", target: susah.id, amount: 1_000_000 };
   }

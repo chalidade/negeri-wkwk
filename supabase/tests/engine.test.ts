@@ -27,7 +27,7 @@ const IDS = ["andi", "budi", "citra", "dewi"];
 
 function setup(n = 4, pro: Profession = "buruh", mode: "rakyat_bersatu" | "juragan" = "rakyat_bersatu"): GameState {
   const members = IDS.slice(0, n).map((id, i) => ({ id, name: id, seat: i, profession: pro }));
-  return createInitialState("room", mode, members, seededRng(1));
+  return createInitialState("room", mode, members, seededRng(1), 1, null, false, true);
 }
 
 /** Jalankan aksi dengan angka acak yang ditentukan (dadu, lalu pilihan kartu). */
@@ -130,11 +130,32 @@ describe("melawan Rezim", () => {
     const s = setup();
     s.semangat = 99;
     s.players.andi.position = 3;
-    const r = act(s, "andi", { type: "roll" }, [1, 2]);
+    // dadu jalan 1+2, lalu dadu aparat 3+4 = 7: massa ditahan, pukulan biasa
+    const r = act(s, "andi", { type: "roll" }, [1, 2, 3, 4]);
     assert.ok(types(r).includes("demo_akbar"));
     assert.equal(r.state.semangat, 0);
     assert.equal(r.state.demoCount, 1);
     assert.equal(r.state.kekuasaan, K(4) - R.DEMO_DAMAGE);
+  });
+
+  it("aparat menghadang Demo Akbar: dadu kecil barikade jebol, dadu besar gas air mata", () => {
+    const awal = () => {
+      const s = setup();
+      s.semangat = 99;
+      s.players.andi.position = 3;
+      return s;
+    };
+    const jebol = act(awal(), "andi", { type: "roll" }, [1, 2, 1, 1]);
+    assert.equal(jebol.state.kekuasaan, K(4) - Math.round(R.DEMO_DAMAGE * R.APARAT_KALI[0]));
+    assert.equal(jebol.state.semangat, R.APARAT_SISA_SEMANGAT);
+    // 6+6: gas air mata, pukulan lemah, satu warga yang masih bebas "diamankan" (indeks 1 = budi)
+    const gas = act(awal(), "andi", { type: "roll" }, [1, 2, 6, 6, 1]);
+    assert.equal(gas.state.kekuasaan, K(4) - Math.round(R.DEMO_DAMAGE * R.APARAT_KALI[2]));
+    assert.equal(gas.state.semangat, 0);
+    assert.equal(gas.state.players.budi.jailTurns, R.LAMA_TILANG);
+    const ev = gas.events.find((e) => e.type === "demo_akbar")!;
+    assert.equal(ev.payload.tingkat, 2);
+    assert.equal(ev.payload.ditahan, "budi");
   });
 
   it("Kekuasaan habis: rakyat menang", () => {
@@ -194,10 +215,75 @@ describe("melawan Rezim", () => {
     s.tiles[19] = { owner: "andi", level: 2 };
     s.turn = 1;
     s.phase = "awaiting_end";
-    const r = act(s, "budi", { type: "end_turn" }, [4, 1, 2]); // kebijakan ke-4: pengalihan isu
+    const r = act(s, "budi", { type: "end_turn" }, [5, 1, 2]); // kebijakan ke-5: bansos, tanpa pungutan
     assert.ok(types(r).includes("rezim_bayar"));
     assert.equal(r.state.kekuasaan, K(2) - R.REZIM_KENA[2]);
     assert.ok(r.state.players.andi.cuan > 20 * JT);
+  });
+
+  it("pungutan masuk Kas Rezim, lalu dihamburkan jadi pencitraan", () => {
+    const s = setup(2);
+    s.players.andi.position = 3;
+    const bayar = act(s, "andi", { type: "roll" }, [1, 2]); // mendarat di Potongan Gaji
+    assert.equal(bayar.state.kas, 20 * JT - bayar.state.players.andi.cuan);
+    assert.ok((bayar.state.kas ?? 0) > 0);
+
+    const t = setup(2);
+    t.kas = R.BELANJA_PER_WARGA * 2 + 300_000;
+    t.kekuasaan = K(2) - 10;
+    t.turn = 1;
+    t.phase = "awaiting_end";
+    // kebijakan ke-5 (bansos), belanja 50 = baliho, dadu Rezim 1+1
+    const r = act(t, "budi", { type: "end_turn" }, [5, 50, 1, 1]);
+    const ev = r.events.find((e) => e.type === "belanja_rezim")!;
+    assert.equal(ev.payload.jenis, "baliho");
+    assert.equal(r.state.kas, 300_000);
+    assert.equal(r.state.kekuasaan, K(2) - 10 + Math.max(1, Math.round((R.BELANJA_CITRA * 2) / 4)));
+  });
+
+  it("Semangat tinggi di akhir ronde: Rezim melempar Pengalihan Isu, lalu jeda beberapa ronde", () => {
+    const s = setup(2);
+    s.semangat = 80;
+    s.turn = 1;
+    s.phase = "awaiting_end";
+    // peluang 10 <= 60: dialihkan; Dadu Nasib 6+6: semua lupa; dadu Rezim 1+1
+    const r = act(s, "budi", { type: "end_turn" }, [10, 6, 6, 1, 1]);
+    const kartu = r.events.find((e) => e.type === "kebijakan")!;
+    assert.equal(kartu.payload.id, "pengalihan_isu");
+    assert.equal(r.state.semangat, 80 - R.ISU_TURUN[2]);
+    assert.equal(r.state.isu, 1);
+    // ronde berikutnya masih jeda: Rezim kembali ke Kebijakan biasa
+    const t = r.state;
+    t.semangat = 80;
+    t.turn = 1;
+    t.phase = "awaiting_end";
+    const lagi = act(t, "budi", { type: "end_turn" }, [5, 1, 1]);
+    assert.equal(lagi.events.find((e) => e.type === "kebijakan")!.payload.id, "bansos_politik");
+  });
+
+  it("mekanik terbuka bertahap: babak 1 belum ada pelicin, pinjol, sidang, aparat, anggaran", () => {
+    const members = ["andi", "budi", "cici", "dewi"].map((id, seat) => ({ id, name: id, seat, profession: "buruh" as const }));
+    const b1 = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, "budi", true);
+    assert.equal(b1.rahasia.buzzer, null);
+    assert.equal(b1.rahasia.rekrut, false);
+    const belum = (e: GameError) => e.code === "belum_terbuka";
+    assert.throws(() => act(b1, "andi", { type: "pinjol", amount: 1_000_000 }), belum);
+    assert.throws(() => act(b1, "andi", { type: "sidang" }), belum);
+    b1.tiles[1] = { owner: "andi", level: 0 };
+    assert.throws(() => act(b1, "andi", { type: "upgrade", tile: 1, jalur: "pelicin" }), belum);
+    // demo di babak 1: tanpa dadu aparat, pukulan selalu penuh
+    b1.semangat = 99;
+    b1.players.andi.position = 3;
+    const r = act(b1, "andi", { type: "roll" }, [1, 2]);
+    assert.equal(r.events.find((e) => e.type === "demo_akbar")!.payload.tingkat, null);
+    assert.equal(r.state.kekuasaan, b1.kekuasaanMaks - R.DEMO_DAMAGE);
+    // babak 3: buzzer sudah ada, anggaran belum
+    const b3 = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 3, "budi");
+    assert.equal(b3.rahasia.buzzer, "budi");
+    b3.kas = 99 * JT;
+    b3.turn = 3;
+    b3.phase = "awaiting_end";
+    assert.ok(!types(act(b3, "dewi", { type: "end_turn" }, [5, 1, 1])).includes("belanja_rezim"));
   });
 
   it("Pemilu tiba dan Rezim masih berkuasa: rakyat kalah", () => {
@@ -326,7 +412,7 @@ describe("Dadu Nasib & buzzer", () => {
 
   function denganBuzzer(): GameState {
     const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession }));
-    return createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, "budi");
+    return createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, "budi", false, true);
   }
 
   it("sabotase buzzer muncul di akhir ronde tanpa nama, kadang meninggalkan jejak", () => {
@@ -340,20 +426,29 @@ describe("Dadu Nasib & buzzer", () => {
     t.semangat = 50;
     t.turn = 3;
     t.phase = "awaiting_end";
-    // pilih "tagar", jejak muncul (10 <= 60), jejaknya jujur (20 <= 55), kebijakan ke-4, dadu Rezim 1+1
-    const r = act(t, "dewi", { type: "end_turn" }, [0, 10, 20, 4, 1, 1]);
+    // pilih "tagar", jejak muncul (10 <= 60), jejaknya jujur (20 <= 55), kebijakan ke-5 (bansos), dadu Rezim 1+1
+    const r = act(t, "dewi", { type: "end_turn" }, [0, 10, 20, 5, 1, 1]);
     assert.ok(types(r).includes("sabotase"));
     assert.deepEqual(r.state.jejak, { budi: 1 });
     assert.equal(r.state.semangat, 50 - R.SABOTASE_SEMANGAT - 10);
+    // tanpa Semangat untuk digembosi, buzzer memoles citra: kepercayaan ke Rezim naik
+    const u = act(s, "budi", { type: "sabotase" }).state;
+    u.semangat = 0;
+    u.kekuasaan = K(4) - 20;
+    u.turn = 3;
+    u.phase = "awaiting_end";
+    const citra = act(u, "dewi", { type: "end_turn" }, [0, 99, 5, 1, 1]);
+    assert.equal(citra.events.find((e) => e.type === "sabotase")!.payload.jenis, "citra");
+    assert.equal(citra.state.kekuasaan, K(4) - 20 + R.SABOTASE_CITRA);
     // jejak palsu (90 > 55) memfitnah warga lain: yang pertama di daftar adalah andi
-    const palsu = act(t, "dewi", { type: "end_turn" }, [0, 10, 90, 0, 4, 1, 1]);
+    const palsu = act(t, "dewi", { type: "end_turn" }, [0, 10, 90, 0, 5, 1, 1]);
     assert.deepEqual(palsu.state.jejak, { andi: 1 });
     assert.ok(r.events.every((e) => e.actor !== "budi" || e.type === "giliran"));
   });
 
   it("Rezim menyuap bot yang paling kepepet di tengah permainan", () => {
     const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession, bot: i > 0 }));
-    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, null, true);
+    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, null, true, true);
     assert.equal(s.rahasia.buzzer, null);
     s.round = 3;
     s.turn = 3;
@@ -368,7 +463,7 @@ describe("Dadu Nasib & buzzer", () => {
 
   function sidangSolo(buzzer: string | null, jejak: Record<string, number>): GameState {
     const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession, bot: i > 0 }));
-    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, buzzer);
+    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, buzzer, false, true);
     s.jejak = jejak;
     s.tiles[4] = { owner: "budi", level: 2 };
     s.tiles[5] = { owner: "citra", level: 1 };

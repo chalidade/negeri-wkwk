@@ -46,7 +46,8 @@ Deno.serve(handler(async ({ admin, userId, body }) => {
     profession: r.profession,
     bot: r.is_bot,
   }));
-  const state = createInitialState(roomId, room.mode as Mode, members, cryptoRng);
+  // room online: semua mekanik aktif, tidak bertahap per babak
+  const state = createInitialState(roomId, room.mode as Mode, members, cryptoRng, 1, null, false, true);
   const secrets = assignSecrets(room.mode as Mode, state.order, cryptoRng);
 
   // Simpan profesi final (yang dipilih acak juga) supaya lobby & UI konsisten.

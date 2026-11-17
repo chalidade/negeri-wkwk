@@ -30,7 +30,7 @@ interface Particle {
   grav: number;
 }
 
-export type BurstKind = "spark" | "dust" | "smoke" | "coins" | "confetti" | "debris" | "flare";
+export type BurstKind = "spark" | "dust" | "smoke" | "coins" | "confetti" | "debris" | "flare" | "air" | "gas";
 const BURST: Record<BurstKind, { n: number; colors: string[]; speed: number; up: number; size: number; life: number; grav: number }> = {
   spark: { n: 26, colors: ["#ffe14d", "#fff7c2", "#ffb300"], speed: 2.6, up: 5.5, size: 0.16, life: 0.9, grav: 9 },
   dust: { n: 20, colors: ["#e8dcc0", "#cbbd9c", "#f6ecd2"], speed: 2.2, up: 1.8, size: 0.26, life: 0.9, grav: 1.5 },
@@ -38,9 +38,13 @@ const BURST: Record<BurstKind, { n: number; colors: string[]; speed: number; up:
   coins: { n: 22, colors: ["#ffd24a", "#ffb300", "#fff2a8"], speed: 1.8, up: 7, size: 0.18, life: 1.1, grav: 12 },
   confetti: { n: 46, colors: ["#ff4d5e", "#ffd84d", "#22c06b", "#2f8bff", "#a35cf0", "#ffffff"], speed: 4.2, up: 7.5, size: 0.17, life: 1.6, grav: 7 },
   flare: { n: 16, colors: ["#ff3b4e", "#ff8a5c", "#ffd84d", "#ffffff"], speed: 0.9, up: 4.6, size: 0.3, life: 1.5, grav: -1.2 },
+  air: { n: 18, colors: ["#8fd3ff", "#cfeeff", "#4aa8f0"], speed: 2.4, up: 3.4, size: 0.16, life: 0.8, grav: 9 },
+  gas: { n: 16, colors: ["#f2f2ee", "#d9dad2", "#c4c6bd"], speed: 1.1, up: 1.6, size: 0.5, life: 2.2, grav: -0.5 },
   debris: { n: 30, colors: ["#fbfbf6", "#d9d2c0", "#b3261e", "#8d8676"], speed: 4.5, up: 6, size: 0.22, life: 1.2, grav: 11 },
 };
 const MAX_PARTICLES = 520;
+/** jumlah aparat di barisan depan Istana */
+const APARAT_N = 16;
 /** jumlah demonstran saat Semangat Demo penuh */
 const CROWD_N = 110;
 
@@ -104,6 +108,16 @@ export class GameScene {
   private energiGoal = 0.2;
   private demoUntil = 0;
   private spanduk: THREE.Mesh[] = [];
+  /** barisan aparat bertameng di depan Istana */
+  private aparat!: THREE.InstancedMesh;
+  private helm!: THREE.InstancedMesh;
+  private tameng!: THREE.InstancedMesh;
+  private aparatAda = false;
+  private aparatK = 0;
+  /** hasil hadangan saat Demo Akbar: 0 jebol, 1 ditahan, 2 gas air mata, null tanpa aparat */
+  private demoTingkat: number | null = null;
+  private demoMulai = 0;
+  private demoLama = 1;
   private markers = new Map<number, THREE.Sprite>();
   private markerMat: THREE.SpriteMaterial | null = null;
   private clouds: THREE.Group[] = [];
@@ -217,6 +231,20 @@ export class GameScene {
     }
     this.signs.frustumCulled = false;
     this.scene.add(this.signs);
+    // aparat bertameng: berjaga di tangga Istana begitu Semangat Demo memanas
+    this.aparat = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.2, 0.3, 4, 8), new THREE.MeshStandardMaterial({ color: "#27324f", roughness: 0.6 }), APARAT_N);
+    this.helm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.19, 10, 8), new THREE.MeshStandardMaterial({ color: "#141a2c", roughness: 0.4 }), APARAT_N);
+    this.tameng = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.42, 0.62, 0.05),
+      new THREE.MeshStandardMaterial({ color: "#b9d4e6", roughness: 0.3, transparent: true, opacity: 0.82 }),
+      APARAT_N,
+    );
+    for (const m of [this.aparat, this.helm, this.tameng]) {
+      for (let i = 0; i < APARAT_N; i++) m.setMatrixAt(i, nol);
+      m.frustumCulled = false;
+      this.scene.add(m);
+    }
+    this.aparat.castShadow = true;
     // dua spanduk besar: muncul saat massa sudah ramai
     for (const [teks, x, z] of [["TURUNKAN HARGA!", -2.7, 3.3], ["RAKYAT BERSATU", 2.9, 4.5]] as const) {
       const m = new THREE.Mesh(
@@ -588,24 +616,48 @@ export class GameScene {
     this.energiGoal = 0.18 + frac * 0.6;
   }
 
-  /** Demo Akbar: seluruh massa merangsek ke Istana selama `ms`. */
-  async demo(ms: number): Promise<void> {
+  /** Aparat berjaga di depan Istana (muncul begitu Semangat Demo memanas). */
+  setAparat(ada: boolean): void {
+    this.aparatAda = ada;
+  }
+
+  /**
+   * Demo Akbar: seluruh massa merangsek ke Istana selama `ms`.
+   * `tingkat`: hasil hadangan aparat (0 barikade jebol, 1 massa ditahan, 2 gas air mata), null = tanpa aparat.
+   */
+  async demo(ms: number, tingkat: number | null = null): Promise<void> {
     this.follow = null;
     this.goalTarget.set(0, TOP, 2.4);
     this.goalDist = this.focusDist * 1.08;
     this.setCrowd(100);
     for (const m of this.massa) m.k = Math.max(m.k, 0.55);
-    this.demoUntil = performance.now() + ms;
+    this.demoTingkat = tingkat;
+    this.demoMulai = performance.now();
+    this.demoLama = ms;
+    this.demoUntil = this.demoMulai + ms;
+    if (tingkat !== null) this.aparatAda = true;
     this.shake(ms * 0.7, 0.16);
     let terakhir = 0;
+    let bubar = false;
     await this.tween(ms, (k) => {
-      // suar asap warna-warni menyala bergantian di tengah massa
-      if (k - terakhir > 0.09) {
-        terakhir = k;
-        const m = this.massa[Math.floor(Math.random() * this.massa.length)];
-        this.burst(Math.random() < 0.7 ? "flare" : "confetti", new THREE.Vector3(m.x, TOP + 0.9, m.z));
-      }
+      if (k - terakhir < 0.07) return;
+      terakhir = k;
+      const m = this.massa[Math.floor(Math.random() * 40)];
+      const titik = new THREE.Vector3(m.x, TOP + 0.9, m.z);
+      const hasil = k > 0.5; // dadu sudah keluar: tampilkan akibatnya
+      if (tingkat === 2 && hasil) {
+        // gas air mata: asap putih menutup barisan depan, massa lari
+        this.burst("gas", titik);
+        if (!bubar) {
+          bubar = true;
+          this.massaTarget = 0;
+        }
+      } else if (tingkat === 1 && hasil) {
+        // meriam air menyemprot barisan depan
+        this.burst("air", new THREE.Vector3(m.x * 0.7, TOP + 1.2, 2.6));
+      } else this.burst(Math.random() < 0.7 ? "flare" : "confetti", titik);
     });
+    this.demoTingkat = null;
   }
 
   /** Penanda "bisa di-upgrade" di atas usaha milik pemain. */
@@ -757,7 +809,11 @@ export class GameScene {
     const demo = now < this.demoUntil;
     this.energi += ((demo ? 1.5 : this.energiGoal) - this.energi) * Math.min(1, dt * 4);
     const e = this.energi;
-    const desak = demo ? 0.55 + Math.abs(Math.sin(t * 5)) * 0.45 : 0; // merangsek ke arah Istana
+    // merangsek ke arah Istana; kalau barikade jebol, massa tembus sampai tangga
+    const maju = demo ? (now - this.demoMulai) / this.demoLama : 0;
+    const jebol = demo && this.demoTingkat === 0 && maju > 0.5;
+    const desak = demo ? 0.55 + Math.abs(Math.sin(t * 5)) * 0.45 + (jebol ? 1.6 : 0) : 0;
+    this.updateAparat(dt, t, demo, maju);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const pos = new THREE.Vector3();
@@ -802,6 +858,40 @@ export class GameScene {
       sp.rotation.z = Math.sin(t * 3 + i) * 0.05;
       sp.position.z = (i === 0 ? 3.3 : 4.5) - desak * 0.5;
     });
+  }
+
+  /** Barisan aparat: masuk dari samping, bertahan, tercerai-berai kalau jebol, maju kalau membubarkan. */
+  private updateAparat(dt: number, t: number, demo: boolean, maju: number): void {
+    const mau = this.aparatAda ? 1 : 0;
+    if (this.aparatK !== mau) this.aparatK = Math.max(0, Math.min(1, this.aparatK + (mau ? dt / 1.1 : -dt / 0.8)));
+    const k = this.aparatK;
+    const m = new THREE.Matrix4();
+    const hasil = demo && maju > 0.5;
+    const cerai = hasil && this.demoTingkat === 0 ? Math.min(1, (maju - 0.5) * 5) : 0;
+    const serbu = hasil && this.demoTingkat === 2 ? Math.min(1, (maju - 0.5) * 4) : 0;
+    for (let i = 0; i < APARAT_N; i++) {
+      if (k <= 0) {
+        m.makeScale(0, 0, 0);
+        this.aparat.setMatrixAt(i, m);
+        this.helm.setMatrixAt(i, m);
+        this.tameng.setMatrixAt(i, m);
+        continue;
+      }
+      const dasar = -4.4 + i * (8.8 / (APARAT_N - 1));
+      const sisi = Math.sign(dasar) || 1;
+      // masuk dari kiri-kanan; jebol: terdorong minggir dan mundur; gas: maju menghalau
+      const x = dasar + sisi * (1 - k) * 7 + sisi * cerai * (1.6 + (i % 3) * 0.5);
+      const z = 2.0 - cerai * 0.9 + serbu * 0.9 + (demo && !hasil ? Math.sin(t * 9 + i) * 0.05 : 0);
+      const y = TOP + 0.24;
+      m.makeTranslation(x, y, z);
+      this.aparat.setMatrixAt(i, m);
+      m.makeTranslation(x, y + 0.44, z);
+      this.helm.setMatrixAt(i, m);
+      if (cerai > 0.6) m.makeScale(0, 0, 0); // tameng terlepas saat barisan bubar
+      else m.makeTranslation(x, y + 0.08, z + 0.27);
+      this.tameng.setMatrixAt(i, m);
+    }
+    this.aparat.instanceMatrix.needsUpdate = this.helm.instanceMatrix.needsUpdate = this.tameng.instanceMatrix.needsUpdate = true;
   }
 
   private updateFx(dt: number, now: number): void {
