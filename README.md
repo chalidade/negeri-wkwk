@@ -42,7 +42,7 @@ Mode kedua, **Juragan**, bersaing jadi yang paling tajir; Rezim tetap mengganggu
 | `supabase/functions/*/` | Edge Functions: `create-room`, `join-room`, `add-bot`, `remove-bot`, `start-game`, `game-action`, `bot-step`, `delete-account`. |
 | `supabase/migrations/` | Skema Postgres + RLS. Klien hanya membaca; semua penulisan lewat Edge Functions. |
 | `supabase/tests/` | Tes engine (termasuk simulasi ratusan game) dan tes RLS. |
-| `web3d/` | Klien 3D (Three.js + Vite). Solo jalan di perangkat tanpa server; main bareng teman lewat Supabase. |
+| `web3d/` | Klien 3D (Three.js + Vite). Solo dan main bareng teman jalan tanpa server milik kita (lihat di bawah). |
 
 Angka keseimbangan ada di `engine/rules.ts`, isi kartu di `engine/cards.ts`.
 
@@ -70,3 +70,14 @@ Tes database butuh PostgreSQL 15+ atau Docker: `npm run test:db`.
 ## Gaya visual
 
 Arah desain "stopmap & stempel": warna datar, garis tinta, bayangan keras, tanpa gradasi. Beranda berupa kartu warga (nama, pekerjaan, pangkat sebagai stempel). Huruf: Bagel Fat One untuk judul dan Plus Jakarta Sans untuk teks. Ikon dan avatar digambar sendiri di `web3d/src/icons.ts` (topi avatar sama dengan topi pion 3D), jadi antarmuka tidak bergantung pada emoji bawaan HP.
+
+## Main bareng tanpa server
+
+Bawaannya (`BACKEND = "p2p"` di `web3d/src/config.ts`) game tidak memakai Supabase sama sekali:
+
+- **Tuan rumah** (`web3d/src/p2p.ts`): HP yang bikin room menjalankan engine dan menyimpan permainan di localStorage-nya. Tamu mengirim aksi, tuan rumah membalas state. Rahasia (siapa buzzer, tawaran amplop) disaring per tamu. Tamu yang terputus lebih dari 25 detik saat gilirannya dimainkan AI sampai dia kembali.
+- **Lewat internet** (`web3d/src/net.ts`): WebRTC langsung antar-HP. HP saling menemukan lewat relay publik Nostr (pustaka trystero) memakai kode room 6 huruf atau link `?gabung=KODE`. Room publik mengumumkan diri di ruang `lobi-publik` sehingga muncul di daftar "Room terbuka".
+- **Tanpa internet**: semua HP di Wi-Fi atau hotspot yang sama. Tuan rumah menampilkan QR undangan, tamu memindainya dan menampilkan QR jawaban, tuan rumah memindai balik. Service worker (`web3d/public/sw.js`) menyimpan aset supaya game tetap bisa dibuka tanpa internet.
+- **Bluetooth dan Wi-Fi Direct** tidak bisa dari peramban; butuh aplikasi Android (Capacitor + Nearby Connections). Belum dikerjakan.
+- **Jalur Supabase** tetap ada: build dengan `VITE_BACKEND=supabase` untuk mengaktifkannya. Kodenya ada di `web3d/src/online-supabase.ts` dan baru dimuat kalau diaktifkan. Migration dan Edge Functions di `supabase/` tidak diubah.
+- Pengujian di satu peramban: tambahkan `?uji` di URL supaya beberapa tab saling tersambung lewat BroadcastChannel tanpa relay.

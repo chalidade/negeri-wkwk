@@ -3,9 +3,10 @@ import "@fontsource/plus-jakarta-sans/latin-600.css";
 import "@fontsource/plus-jakarta-sans/latin-700.css";
 import "@fontsource/plus-jakarta-sans/latin-800.css";
 import "./style.css";
-import { ApiError, api, getGame, getMembers, getRoom, subscribeRoom, supabase } from "./api.ts";
 import { confirmBox, h, sceneEl, toast, ui } from "./dom.ts";
-import { hasSoloSave, newSoloGame, onlineGame, resumeSoloGame, type Driver } from "./driver.ts";
+import { BACKEND } from "./config.ts";
+import { hasSoloSave, newSoloGame, resumeSoloGame, type Driver } from "./driver.ts";
+import { layarBareng } from "./online.ts";
 import { startGame } from "./game.ts";
 import { getStats, showHelp } from "./help.ts";
 import { ava, ic, rezimAva } from "./icons.ts";
@@ -33,16 +34,39 @@ function show(view: HTMLElement): void {
   ui.replaceChildren(view);
 }
 
-const errorMessage = (e: unknown): string => (e instanceof ApiError ? e.message : "Koneksi bermasalah, coba lagi.");
 const savedName = (): string => (localStorage.getItem(NAME_KEY) ?? "").trim();
 const savedProf = (): Profession | null => {
   const p = localStorage.getItem(PROF_KEY) as Profession | null;
   return p && PROFESSIONS.includes(p) ? p : null;
 };
 
-function runGame(driver: Driver, onReplay?: (level: number) => void): void {
+function runGame(
+  driver: Driver,
+  onReplay?: (level: number) => void,
+  opsi: { onExit?: () => void; menu?: { label: string; ikon: string; aksi: () => void }[] } = {},
+): void {
   cleanup?.();
-  cleanup = startGame(driver, { onExit: () => homeScreen(), onReplay });
+  cleanup = startGame(driver, { onExit: opsi.onExit ?? (() => homeScreen()), onReplay, menu: opsi.menu });
+}
+
+/** Buka "Main bareng teman": tanpa server (bawaan), atau jalur Supabase kalau saklarnya dinyalakan. */
+async function bareng(nama: string, prof: Profession, babak: number, kode?: string): Promise<void> {
+  if (BACKEND === "supabase") {
+    const { bukaOnlineSupabase } = await import("./online-supabase.ts");
+    return bukaOnlineSupabase(nama, { show, runGame: (d) => runGame(d), homeScreen, setCleanup: (f) => (cleanup = f) });
+  }
+  layarBareng(
+    {
+      nama,
+      profesi: prof,
+      babak,
+      show,
+      setCleanup: (f) => (cleanup = f),
+      runGame: (d, o) => runGame(d, undefined, o),
+      home: () => homeScreen(),
+    },
+    kode,
+  );
 }
 
 // ------------------------------------------------------------------ beranda
@@ -188,7 +212,7 @@ function homeScreen(): void {
             class: "btn grey block",
             onclick: async () => {
               const n = needName();
-              if (n && (await ensureSignedIn(n))) void onlineScreen();
+              if (n) void bareng(n, prof, babak);
             },
           },
           ic("warga"),
@@ -198,255 +222,6 @@ function homeScreen(): void {
       ),
     ),
   );
-}
-
-// ------------------------------------------------------------------ online
-
-async function ensureSignedIn(name: string): Promise<boolean> {
-  const { data } = await supabase.auth.getSession();
-  if (!data.session) {
-    const { error } = await supabase.auth.signInAnonymously({ options: { data: { display_name: name } } });
-    if (error) {
-      toast(`Gagal tersambung: ${error.message}`);
-      return false;
-    }
-    return true;
-  }
-  const user = data.session.user;
-  if (user.user_metadata?.display_name !== name) {
-    await supabase.auth.updateUser({ data: { display_name: name } });
-    await supabase.from("profiles").update({ display_name: name }).eq("id", user.id);
-  }
-  return true;
-}
-
-async function enterRoom(roomId: string): Promise<void> {
-  const driver = await onlineGame(roomId).catch(() => null);
-  if (!driver) {
-    localStorage.removeItem("lastRoom");
-    toast("Room itu sudah tidak bisa dibuka. Bikin room baru ya.");
-    return onlineScreen();
-  }
-  runGame(driver);
-}
-
-async function onlineScreen(): Promise<void> {
-  let mode: Mode = "rakyat_bersatu";
-  const segA = h("button", {}, "Rakyat Bersatu");
-  const segB = h("button", {}, "Juragan");
-  const modeHint = h("div", { class: "muted" });
-  const setMode = (m: Mode) => {
-    mode = m;
-    segA.className = m === "rakyat_bersatu" ? "on" : "";
-    segB.className = m === "juragan" ? "on" : "";
-    modeHint.textContent =
-      m === "rakyat_bersatu"
-        ? "Semua warga satu tim menumbangkan Rezim."
-        : "Saling bersaing jadi yang paling tajir, Rezim tetap mengganggu.";
-  };
-  segA.onclick = () => setMode("rakyat_bersatu");
-  segB.onclick = () => setMode("juragan");
-  setMode(mode);
-
-  const code = h("input", { placeholder: "KODE ROOM", maxLength: 6, style: "text-transform:uppercase" });
-  const go = async (fn: () => Promise<string>) => {
-    try {
-      const roomId = await fn();
-      localStorage.setItem("lastRoom", roomId);
-      void lobbyScreen(roomId);
-    } catch (e) {
-      toast(errorMessage(e));
-    }
-  };
-  const last = localStorage.getItem("lastRoom");
-  const prof = savedProf();
-
-  show(
-    h(
-      "div",
-      { class: "screen" },
-      h(
-        "div",
-        { class: "col" },
-        h("div", { class: "row" }, h("button", { class: "icon", "aria-label": "Kembali", onclick: () => homeScreen() }, ic("kiri")), h("div", { class: "h1" }, "Main Bareng Teman")),
-        last ? h("button", { class: "btn green block", onclick: () => void lobbyScreen(last) }, ic("main"), "Lanjutkan room terakhir") : null,
-        h(
-          "div",
-          { class: "panel col" },
-          h("label", {}, "Bikin room baru"),
-          h("div", { class: "seg" }, segA, segB),
-          modeHint,
-          h("button", { class: "btn block", onclick: () => go(async () => (await api.createRoom(mode, prof)).roomId) }, ic("tambah"), "Bikin room"),
-        ),
-        h(
-          "div",
-          { class: "panel col" },
-          h("label", {}, "Gabung room teman"),
-          h(
-            "div",
-            { class: "row" },
-            code,
-            h(
-              "button",
-              {
-                class: "btn blue",
-                onclick: () => {
-                  const c = code.value.trim().toUpperCase();
-                  if (c.length !== 6) return toast("Kode room 6 karakter.");
-                  void go(async () => (await api.joinRoom(c, prof)).roomId);
-                },
-              },
-              "Gabung",
-            ),
-          ),
-        ),
-        h(
-          "div",
-          { class: "row center" },
-          h(
-            "button",
-            {
-              class: "btn small grey",
-              onclick: async () => {
-                await supabase.auth.signOut();
-                localStorage.removeItem("lastRoom");
-                homeScreen();
-              },
-            },
-            ic("keluar"),
-            "Keluar akun",
-          ),
-          h(
-            "button",
-            {
-              class: "btn small grey",
-              onclick: async () => {
-                if (!(await confirmBox("Hapus akun?", "Akun online dan data permainanmu dihapus permanen.", "Hapus"))) return;
-                try {
-                  await api.deleteAccount();
-                  await supabase.auth.signOut();
-                  localStorage.removeItem("lastRoom");
-                  homeScreen();
-                } catch (e) {
-                  toast(errorMessage(e));
-                }
-              },
-            },
-            "Hapus akun",
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-async function lobbyScreen(roomId: string): Promise<void> {
-  if (await getGame(roomId).catch(() => null)) return enterRoom(roomId);
-  let room;
-  try {
-    room = await getRoom(roomId);
-  } catch {
-    localStorage.removeItem("lastRoom");
-    toast("Room tidak ditemukan.");
-    return onlineScreen();
-  }
-  const me = (await supabase.auth.getUser()).data.user?.id;
-  const host = room.host_id === me;
-  const list = h("div", { class: "col", style: "gap:8px" });
-  const counter = h("label", {});
-  const startBtn = h("button", { class: "btn big red block" }, "Mulai permainan");
-  const addBotBtn = h("button", { class: "btn grey block" }, ic("robot"), "Tambah bot");
-
-  const renderMembers = async () => {
-    const members = await getMembers(roomId);
-    counter.textContent = `Warga (${members.length}/${room.max_players})`;
-    list.replaceChildren(
-      ...members.map((m) =>
-        h(
-          "div",
-          { class: "member" },
-          ava(m.profession, m.seat),
-          h(
-            "div",
-            { style: "flex:1" },
-            h("b", {}, m.is_bot ? ic("robot") : null, m.is_bot ? ` ${m.display_name}` : m.display_name),
-            h("div", { class: "muted" }, m.profession ? PROFESSION_LABEL[m.profession] : "Profesi acak"),
-          ),
-          m.user_id === room.host_id ? h("span", { class: "tag", style: "background:var(--ink)" }, ic("mahkota"), "Host") : null,
-          m.is_bot && host
-            ? h(
-                "button",
-                {
-                  class: "icon",
-                  onclick: async () => {
-                    await api.removeBot(roomId, m.user_id).catch((e) => toast(errorMessage(e)));
-                    await renderMembers();
-                  },
-                },
-                ic("silang"),
-              )
-            : null,
-        ),
-      ),
-    );
-    startBtn.disabled = members.length < 2;
-    startBtn.textContent = members.length < 2 ? "Tunggu teman, atau tambah bot" : "Mulai permainan";
-    addBotBtn.style.display = members.length >= room.max_players ? "none" : "";
-  };
-
-  addBotBtn.onclick = async () => {
-    addBotBtn.disabled = true;
-    await api.addBot(roomId).catch((e) => toast(errorMessage(e)));
-    await renderMembers();
-    addBotBtn.disabled = false;
-  };
-  startBtn.onclick = async () => {
-    startBtn.disabled = true;
-    try {
-      await api.startGame(roomId);
-      void enterRoom(roomId);
-    } catch (e) {
-      toast(errorMessage(e));
-      startBtn.disabled = false;
-    }
-  };
-
-  show(
-    h(
-      "div",
-      { class: "screen" },
-      h(
-        "div",
-        { class: "col" },
-        h("div", { class: "row" }, h("button", { class: "icon", "aria-label": "Kembali", onclick: () => void onlineScreen() }, ic("kiri")), h("div", { class: "h1" }, "Ruang Tunggu")),
-        h(
-          "div",
-          { class: "panel col center" },
-          h("label", {}, "Kode room"),
-          h(
-            "div",
-            {
-              class: "code",
-              onclick: () => void navigator.clipboard?.writeText(room.code).then(() => toast("Kode disalin!")),
-            },
-            room.code,
-          ),
-          h("div", { class: "muted" }, "Ketuk kode untuk menyalin, lalu kirim ke teman."),
-          h("div", {}, room.mode === "rakyat_bersatu" ? "Mode Rakyat Bersatu" : "Mode Juragan"),
-        ),
-        counter,
-        list,
-        host ? addBotBtn : null,
-        host ? startBtn : h("div", { class: "panel center" }, "Menunggu host memulai…"),
-      ),
-    ),
-  );
-
-  await renderMembers();
-  cleanup = subscribeRoom(roomId, {
-    onMembers: () => void renderMembers(),
-    onGame: () => void enterRoom(roomId),
-  });
 }
 
 // ------------------------------------------------------------------ mulai
@@ -460,7 +235,22 @@ async function boot(): Promise<void> {
   terapkanKosmetik();
   // peramban baru mengizinkan suara setelah sentuhan pertama
   addEventListener("pointerdown", () => mulaiMusik(), { once: true });
+  daftarkanSW();
   homeScreen();
+  // dibuka lewat link undangan (?gabung=KODE): langsung masuk ruang tunggu kalau nama sudah ada
+  const kode = new URLSearchParams(location.search).get("gabung");
+  if (kode && /^[A-Z0-9]{6}$/i.test(kode)) {
+    history.replaceState(null, "", location.pathname);
+    const nama = savedName();
+    if (nama.length >= 2) void bareng(nama, savedProf() ?? "buruh", getStats().babak, kode);
+    else toast(`Isi nama dulu, lalu tekan Main bareng teman dan masukkan kode ${kode.toUpperCase()}.`);
+  }
+}
+
+/** Service worker: aset game disimpan di HP, jadi game tetap bisa dibuka tanpa internet. */
+function daftarkanSW(): void {
+  if (!("serviceWorker" in navigator) || import.meta.env.DEV || new URLSearchParams(location.search).has("debug")) return;
+  navigator.serviceWorker.register("/sw.js").catch(() => undefined);
 }
 
 void boot();

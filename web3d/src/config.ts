@@ -1,3 +1,8 @@
+// Saklar backend online.
+// "p2p" (bawaan): tanpa server sendiri. HP tuan rumah menjalankan permainan, yang lain tersambung langsung.
+// "supabase": jalur lama lewat Supabase. Kodenya tetap disimpan, aktifkan dengan VITE_BACKEND=supabase saat build.
+export const BACKEND: "p2p" | "supabase" = import.meta.env.VITE_BACKEND === "supabase" ? "supabase" : "p2p";
+
 // URL dan publishable key Supabase memang boleh publik: data dilindungi RLS.
 // Bisa ditimpa lewat VITE_SUPABASE_URL / VITE_SUPABASE_KEY saat build.
 export const SUPABASE_URL: string =

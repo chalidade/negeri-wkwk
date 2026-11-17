@@ -4,13 +4,8 @@ import type { Action, GameState } from "./shared.ts";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-export class ApiError extends Error {
-  code?: string;
-  constructor(message: string, code?: string) {
-    super(message);
-    this.code = code;
-  }
-}
+import { ApiError, type GameRow } from "./errors.ts";
+export { ApiError, type GameRow };
 
 async function call<T>(fn: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
@@ -54,10 +49,6 @@ export interface SecretRow {
   mimpi: string;
 }
 
-export interface GameRow {
-  version: number;
-  state: GameState;
-}
 
 export const api = {
   createRoom: (mode: string, profession: string | null) =>

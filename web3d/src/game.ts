@@ -1,5 +1,5 @@
 // Layar permainan: HUD, urutan cerita (animasi per event), dan tombol aksi.
-import { ApiError, type GameRow } from "./api.ts";
+import { ApiError, type GameRow } from "./errors.ts";
 import { h, modal, sceneEl, toast, ui } from "./dom.ts";
 import type { Driver } from "./driver.ts";
 import { HELP_SEEN, FITUR_BARU, recordGame, showHelp, ubahEmas } from "./help.ts";
@@ -65,7 +65,7 @@ const FACE_ROT: Record<number, [number, number]> = { 1: [0, 0], 6: [0, 180], 2: 
 
 export function startGame(
   driver: Driver,
-  opts: { onExit: () => void; onReplay?: (level: number) => void },
+  opts: { onExit: () => void; onReplay?: (level: number) => void; menu?: { label: string; ikon: string; aksi: () => void }[] },
 ): () => void {
   let { state, version } = driver.current();
   const me = driver.me;
@@ -1001,7 +1001,7 @@ export function startGame(
       if (aku && !aku.bankrupt && state.sidang && state.sidang.suara[me] === undefined) showVote();
       return;
     }
-    if (driver.local && state.rahasia?.tawaran === me && myTurn()) return tawaranSuap();
+    if (state.rahasia?.tawaran === me && myTurn()) return tawaranSuap();
     const cur = state.players[state.order[state.turn]];
     if (!cur?.bot || !state.players[me]) return;
     // Online: kalau ada beberapa manusia, yang kursinya paling depan jadi penggerak utama.
@@ -1740,6 +1740,7 @@ export function startGame(
       lagu,
       kecepatan,
       h("button", { class: "btn grey block", onclick: () => (close(), showLog()) }, ic("riwayat"), "Riwayat"),
+      ...(opts.menu ?? []).map((m) => h("button", { class: "btn grey block", onclick: () => (close(), m.aksi()) }, ic(m.ikon), m.label)),
       h("button", { class: "btn red block", onclick: () => (close(), confirmExit()) }, ic("keluar"), "Keluar"),
     );
   }
