@@ -297,7 +297,12 @@ export function biayaUpgrade(idx: number, jalur: Jalur = "resmi"): number {
 
 /** Uang pelicin ketahuan: denda, ditahan, dan urusannya batal. Mengembalikan true kalau kena. */
 export function kenaOTT(ctx: Ctx, id: string): boolean {
-  if (ctx.rng.int(1, 100) > R.PELUANG_OTT * 100) return false;
+  if (ctx.rng.int(1, 100) > R.PELUANG_OTT * 100) {
+    // lolos OTT, tapi transaksinya tercatat: bisa muncul sebagai jejak digital di akhir ronde
+    const r = ctx.s.rahasia;
+    if (!(r.pelicin ?? []).includes(id)) r.pelicin = [...(r.pelicin ?? []), id];
+    return false;
+  }
   emit(ctx, { type: "ott", actor: id, payload: { denda: R.DENDA_OTT } });
   transfer(ctx, id, GOV, R.DENDA_OTT);
   if (!player(ctx.s, id).bankrupt) sendToJail(ctx, id, "ott");

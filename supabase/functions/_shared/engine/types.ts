@@ -137,6 +137,8 @@ export interface GameState {
     tawaran?: string | null;
     /** yang sudah menolak amplop: tidak akan ditawari lagi */
     ditolak?: string[];
+    /** warga yang main uang pelicin ronde ini: bisa ikut kena jejak digital */
+    pelicin?: string[];
   };
   /** grup warna yang sudah pernah jadi Kampung Mandiri */
   kampung: string[];

@@ -107,7 +107,8 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
   }
 
   // Buzzer menyiapkan satu sabotase tiap ronde.
-  if (buzzer && s.rahasia.buzzer === botId && s.rahasia.antre === 0 && s.phase === "awaiting_roll") {
+  // Tidak tiap ronde: buzzer yang terlalu rajin gampang dibedakan dari operasi Rezim sendiri.
+  if (buzzer && s.rahasia.buzzer === botId && s.rahasia.antre === 0 && s.phase === "awaiting_roll" && (s.round + p.seat) % 3 !== 0) {
     // Jejak ke dirinya mulai menumpuk? Sesekali pura-pura ikut ditangkap supaya terlihat seperti korban.
     const alibi = (s.jejak[botId] ?? 0) >= 2 && p.jailTurns === 0 && (s.round + p.seat) % 4 === 0;
     return alibi ? { type: "sabotase", jenis: "alibi" } : { type: "sabotase" };

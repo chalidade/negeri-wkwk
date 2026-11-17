@@ -725,6 +725,8 @@ function rezimTurn(ctx: Ctx): void {
 
   rekrutBuzzer(ctx);
   sabotaseBuzzer(ctx);
+  operasiSiber(ctx);
+  jejakPelicin(ctx);
   if (isOver(s)) return;
 
   // Semangat sudah tinggi? Rezim bisa melempar Pengalihan Isu sebagai ganti Kebijakan ronde ini.
@@ -847,6 +849,47 @@ function sabotaseBuzzer(ctx: Ctx): void {
   const ke = jujur ? id : pickRandom(ctx.rng, lain).id;
   s.jejak[ke] = (s.jejak[ke] ?? 0) + 1;
   emit(ctx, { type: "jejak", payload: { ke, total: s.jejak[ke] } });
+}
+
+/** Buzzer yang masih tersembunyi dan aktif saat ini (kalau ada). */
+function buzzerAktif(s: GameState): string | null {
+  const id = s.rahasia.buzzer;
+  return id && !s.players[id].bankrupt && !s.players[id].buzzer ? id : null;
+}
+
+/**
+ * Tanpa buzzer aktif, pasukan siber Rezim sendiri kadang beraksi. Dari luar tampil persis seperti
+ * sabotase buzzer, lengkap dengan jejak digital yang menunjuk warga acak. Jadi sabotase dan jejak
+ * tidak membuktikan ada buzzer, dan sepinya sabotase juga tidak membuktikan tidak ada.
+ */
+function operasiSiber(ctx: Ctx): void {
+  const s = ctx.s;
+  if (!coop(s) || !punya(s, "buzzer") || buzzerAktif(s) || s.rahasia.tawaran || s.round < 3) return;
+  if (ctx.rng.int(1, 100) > R.PELUANG_OPERASI * 100) return;
+  if (s.semangat >= R.OPERASI_SEMANGAT && ctx.rng.int(0, 1) === 0) {
+    emit(ctx, { type: "sabotase", payload: { jenis: "tagar" } });
+    addSemangat(ctx, -R.OPERASI_SEMANGAT, "sabotase");
+  } else {
+    emit(ctx, { type: "sabotase", payload: { jenis: "citra", naik: 1 } });
+    healRezim(ctx, 1, "pencitraan");
+  }
+  if (ctx.rng.int(1, 100) > R.PELUANG_JEJAK * 100) return;
+  const ke = pickRandom(ctx.rng, alivePlayers(s)).id;
+  s.jejak[ke] = (s.jejak[ke] ?? 0) + 1;
+  emit(ctx, { type: "jejak", payload: { ke, total: s.jejak[ke] } });
+}
+
+/** Warga biasa yang main uang pelicin ronde ini juga bisa kena jejak digital. */
+function jejakPelicin(ctx: Ctx): void {
+  const s = ctx.s;
+  const daftar = s.rahasia.pelicin ?? [];
+  s.rahasia.pelicin = [];
+  if (!coop(s) || !punya(s, "buzzer")) return;
+  for (const id of daftar) {
+    if (s.players[id].bankrupt || ctx.rng.int(1, 100) > R.PELUANG_JEJAK_PELICIN * 100) continue;
+    s.jejak[id] = (s.jejak[id] ?? 0) + 1;
+    emit(ctx, { type: "jejak", payload: { ke: id, total: s.jejak[id] } });
+  }
 }
 
 /**
@@ -976,6 +1019,10 @@ function usir(ctx: Ctx, id: string): void {
     hitRezim(ctx, R.BONGKAR_DAMAGE, "buzzer_terbongkar");
     // kalau yang diusir itu pemain manusia terakhir, tidak ada lagi yang menonton: selesai
     if (!isOver(s) && s.order.some((pid) => !s.players[pid].bot) && !hidup.some((x) => !x.bot)) endGame(ctx, { kind: "buzzer_terusir" });
+    // Satu buzzer tumbang belum tentu selesai: Rezim bisa mencari pengganti, dan tidak ada yang tahu.
+    s.rahasia.buzzer = null;
+    s.rahasia.rencana = null;
+    s.rahasia.rekrut = !isOver(s) && hidup.length >= 3 && ctx.rng.int(1, 100) <= R.PELUANG_GANTI_BUZZER * 100;
     return;
   }
 

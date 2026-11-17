@@ -17,7 +17,7 @@ export const FITUR_BARU: { fitur: Fitur; ikon: string; judul: string; isi: strin
   { fitur: "pelicin", ikon: "tangan", judul: "Uang pelicin", isi: "Beli dan upgrade bisa lewat jalur pelicin: lebih murah, tapi 1 dari 4 kena OTT (denda dan ditahan), dan tiap suap bikin Rezim pulih." },
   { fitur: "aparat", ikon: "dadu", judul: "Aparat menghadang demo", isi: "Hasil Demo Akbar ditentukan dadu: angka kecil barikade jebol, angka besar massa dibubarkan gas air mata dan satu warga diamankan." },
   { fitur: "pinjol", ikon: "pinjol", judul: "Pinjol dan bantu warga", isi: "Kepepet? Pinjol cair seketika, tapi bunganya 20% di depan dan 10% tiap ronde. Warga lain bisa bantu melunasi lewat tombol Aksi." },
-  { fitur: "buzzer", ikon: "kaca", judul: "Buzzer dan Sidang Warga", isi: "Rezim bisa menyuap satu warga, dan bisa juga menyodorkan amplop ke kamu. Buzzer main seperti biasa tapi diam-diam menyabotase. Curiga? Panggil Sidang Warga: suara terbanyak diusir." },
+  { fitur: "buzzer", ikon: "kaca", judul: "Buzzer dan Sidang Warga", isi: "Rezim bisa menyuap satu warga, dan bisa juga menyodorkan amplop ke kamu. Buzzer main seperti biasa tapi diam-diam menyabotase. Sabotase dan jejak juga bisa ulah Rezim sendiri, dan buzzer yang tertangkap bisa diganti. Yakin? Panggil Sidang Warga: suara terbanyak diusir." },
   { fitur: "anggaran", ikon: "uang", judul: "Anggaran dan pengalihan isu", isi: "Pungutan yang kamu bayar masuk Kas Rezim, lalu dihamburkan jadi pencitraan. Semangat tinggi di akhir ronde bisa digembosi Pengalihan Isu." },
 ];
 

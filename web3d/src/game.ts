@@ -680,7 +680,7 @@ export function startGame(
           break;
         }
         case "jejak":
-          tip("jejak", "kaca", "Jejak digital bisa asli, bisa fitnah. Kalau curiga, panggil Sidang Warga lewat tombol Aksi.");
+          tip("jejak", "kaca", "Jejak digital bisa dari buzzer, dari operasi Rezim sendiri, atau gara-gara orangnya main pelicin. Kalau yakin, panggil Sidang Warga lewat tombol Aksi.");
           sfx.click();
           state = { ...state, jejak: { ...state.jejak, [String(p.ke)]: Number(p.total) } };
           updateTop();
@@ -705,7 +705,7 @@ export function startGame(
           scene.burstAtPawn(String(p.target), "confetti");
           scene.killPawn(String(p.target));
           say(line!, "good");
-          await banner("good", "BUZZER DIUSIR!", `${nm(String(p.target))} ternyata dibayar Rezim. Hartanya balik ke warga.`, 2600);
+          await banner("good", "BUZZER DIUSIR!", `${nm(String(p.target))} ternyata dibayar Rezim. Hartanya balik ke warga. Tapi Rezim bisa cari pengganti.`, 2800);
           break;
         case "salah_usir":
           sfx.lose();
@@ -1086,9 +1086,13 @@ export function startGame(
           ? h(
               "div",
               { class: "muted small" },
-              state.rahasia.buzzer
-                ? `Buzzernya ternyata ${state.players[state.rahasia.buzzer].name}${state.players[state.rahasia.buzzer].buzzer ? " (sudah terbongkar)" : " (lolos sampai akhir!)"}.`
-                : "Tidak ada buzzer di permainan ini. Curiganya saja yang capek.",
+              (() => {
+                // bisa lebih dari satu: yang terbongkar, dan penggantinya yang mungkin lolos
+                const ketahuan = playersInOrder(state).filter((p) => p.buzzer).map((p) => `${p.id === me ? "kamu" : p.name} (terbongkar)`);
+                const lolos = state.rahasia.buzzer ? [`${state.rahasia.buzzer === me ? "kamu" : state.players[state.rahasia.buzzer].name} (lolos sampai akhir!)`] : [];
+                const semua = [...ketahuan, ...lolos];
+                return semua.length > 0 ? `Buzzer di permainan ini: ${semua.join(", ")}.` : "Tidak ada buzzer di permainan ini. Sabotasenya ulah pasukan siber Rezim sendiri.";
+              })(),
             )
           : null,
         res.win && hadiah.bintang < 3

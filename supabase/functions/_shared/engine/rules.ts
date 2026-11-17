@@ -189,3 +189,12 @@ export const BABAK_FITUR: Record<Fitur, number> = { pelicin: 2, aparat: 2, pinjo
 export const SUAP_JUMLAH = 4_000_000;
 /** Bayaran buzzer tiap sabotasenya terlaksana. */
 export const SUAP_GAJI = 500_000;
+
+// Supaya buzzer benar-benar sulit ditebak: jejak dan sabotase tidak selalu berarti ada buzzer.
+/** Tanpa buzzer aktif, pasukan siber Rezim sendiri kadang beraksi, dan tampil persis seperti sabotase buzzer. */
+export const PELUANG_OPERASI = 0.4;
+export const OPERASI_SEMANGAT = 6;
+/** Warga yang main pelicin ronde ini bisa kena jejak digital di akhir ronde. */
+export const PELUANG_JEJAK_PELICIN = 0.35;
+/** Buzzer terbongkar: peluang Rezim langsung mencari pengganti. */
+export const PELUANG_GANTI_BUZZER = 0.65;

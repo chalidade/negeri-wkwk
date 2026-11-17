@@ -497,6 +497,44 @@ describe("Dadu Nasib & buzzer", () => {
     assert.equal(a.state.jejak.budi, 1);
   });
 
+  it("sulit ditebak: operasi Rezim tampil seperti sabotase, dan pemakai pelicin ikut kena jejak", () => {
+    // tanpa buzzer sama sekali, tetap bisa muncul "sabotase" berikut jejak ke warga acak
+    const s = setup();
+    s.round = 3;
+    s.kekuasaan = K(4) - 10;
+    s.turn = 3;
+    s.phase = "awaiting_end";
+    // operasi jalan (10 <= 40), jejak muncul (10 <= 60) ke warga indeks 2, kebijakan ke-5, dadu Rezim 1+1
+    const r = act(s, "dewi", { type: "end_turn" }, [10, 10, 2, 5, 1, 1]);
+    assert.equal(r.state.rahasia.buzzer, null);
+    assert.ok(types(r).includes("sabotase"));
+    assert.deepEqual(r.state.jejak, { citra: 1 });
+
+    // lolos OTT (99 > 25) tetap tercatat, lalu jadi jejak di akhir ronde (10 <= 35)
+    const t = setup();
+    t.tiles[1] = { owner: "andi", level: 0 };
+    const u = act(t, "andi", { type: "upgrade", tile: 1, jalur: "pelicin" }, [99]).state;
+    assert.deepEqual(u.rahasia.pelicin, ["andi"]);
+    u.turn = 3;
+    u.phase = "awaiting_end";
+    const v = act(u, "dewi", { type: "end_turn" }, [10, 5, 1, 1]);
+    assert.deepEqual(v.state.jejak, { andi: 1 });
+    assert.deepEqual(v.state.rahasia.pelicin, []);
+  });
+
+  it("buzzer terbongkar belum tentu selesai: Rezim bisa mencari pengganti", () => {
+    const usirBudi = (acak: number) => {
+      let s = act(denganBuzzer(), "andi", { type: "sidang" }).state;
+      for (const id of ["andi", "budi", "citra"]) s = act(s, id, { type: "vote", target: id === "budi" ? "andi" : "budi" }).state;
+      return act(s, "dewi", { type: "vote", target: "budi" }, [acak]).state;
+    };
+    const ganti = usirBudi(10);
+    assert.equal(ganti.players.budi.buzzer, true);
+    assert.equal(ganti.rahasia.buzzer, null);
+    assert.equal(ganti.rahasia.rekrut, true); // 10 <= 65: perekrutan dibuka lagi
+    assert.equal(usirBudi(99).rahasia.rekrut, false);
+  });
+
   it("buzzer manusia terakhir diusir sidang: permainan berhenti", () => {
     const members = [
       { id: "andi", name: "andi", seat: 0, profession: "buruh" as const },
