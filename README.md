@@ -81,3 +81,13 @@ Bawaannya (`BACKEND = "p2p"` di `web3d/src/config.ts`) game tidak memakai Supaba
 - **Bluetooth dan Wi-Fi Direct** tidak bisa dari peramban; butuh aplikasi Android (Capacitor + Nearby Connections). Belum dikerjakan.
 - **Jalur Supabase** tetap ada: build dengan `VITE_BACKEND=supabase` untuk mengaktifkannya. Kodenya ada di `web3d/src/online-supabase.ts` dan baru dimuat kalau diaktifkan. Migration dan Edge Functions di `supabase/` tidak diubah.
 - Pengujian di satu peramban: tambahkan `?uji` di URL supaya beberapa tab saling tersambung lewat BroadcastChannel tanpa relay.
+
+## Aplikasi Android
+
+`web3d/android/` adalah proyek Capacitor yang membungkus build web yang sama (`com.chalidade.negeriwkwk`).
+Workflow `.github/workflows/android.yml` membangunnya tiap ada perubahan di `web3d/` dan melampirkan hasilnya ke GitHub Release `android-terbaru`:
+
+- `negeri-wkwk-coba.apk`: build debug, langsung bisa dipasang untuk mencoba.
+- `negeri-wkwk-1.0.N.aab` dan `.apk`: build rilis bertanda tangan kunci unggah. Hanya dibuat kalau secret `WKWK_STORE_PASSWORD` sudah diisi di Settings > Secrets and variables > Actions. File `.aab` yang diunggah ke Play Console.
+
+Kunci unggah ada di `web3d/android/kunci-unggah.p12` (PKCS12, alias `upload`), dilindungi password acak yang hanya ada di secret tadi dan di catatan pemilik repo. Ikon dan splash dibuat dari `web3d/assets/` dengan `npx @capacitor/assets generate --android`.

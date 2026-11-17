@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import jsQR from "jsqr";
 import { h, modal, toast } from "./dom.ts";
 import type { Driver } from "./driver.ts";
+import { WEB_URL, diAplikasi } from "./config.ts";
 import { ApiError } from "./errors.ts";
 import { ava, ic } from "./icons.ts";
 import { saluranInternet, tamuLokal, tuanLokal, type Saluran, type TuanLokal } from "./net.ts";
@@ -37,17 +38,29 @@ const pesanGalat = (e: unknown) => (e instanceof ApiError || e instanceof Error 
 const kembali = (aksi: () => void) => h("button", { class: "icon", "aria-label": "Kembali", onclick: aksi }, ic("kiri"));
 
 /** Link undangan yang bisa dikirim lewat WA: membuka game dan langsung bergabung. */
-const linkRoom = (kode: string) => `${location.origin}${location.pathname}?gabung=${kode}`;
+const linkRoom = (kode: string) => `${diAplikasi() ? WEB_URL : location.origin}/?gabung=${kode}`;
+
+/** Salin teks: di aplikasi Android pakai plugin, di peramban pakai clipboard biasa. */
+export async function salin(teks: string): Promise<void> {
+  if (diAplikasi()) {
+    const { Clipboard } = await import("@capacitor/clipboard");
+    await Clipboard.write({ string: teks });
+  } else await navigator.clipboard?.writeText(teks);
+}
 
 async function bagikan(kode: string): Promise<void> {
   const teks = `Main Negeri Wkwk bareng aku! Kode room: ${kode}`;
   const url = linkRoom(kode);
   try {
+    if (diAplikasi()) {
+      const { Share } = await import("@capacitor/share");
+      return void (await Share.share({ title: "Negeri Wkwk", text: teks, url, dialogTitle: "Ajak teman" }));
+    }
     if (navigator.share) return await navigator.share({ title: "Negeri Wkwk", text: teks, url });
   } catch {
     return; // dibatalkan
   }
-  await navigator.clipboard?.writeText(`${teks}\n${url}`).catch(() => undefined);
+  await salin(`${teks}\n${url}`).catch(() => undefined);
   toast("Link room disalin. Tempel di WA.");
 }
 
@@ -458,7 +471,7 @@ async function undangQR(sal: TuanLokal): Promise<void> {
       h("div", { class: "sheet-title" }, ic("kartu"), "Undang teman"),
       h("div", { class: "muted" }, "1. Teman buka Negeri Wkwk, pilih Main bareng teman, lalu Pindai QR tuan rumah."),
       kanvas,
-      h("button", { class: "btn grey small", onclick: () => void navigator.clipboard?.writeText(undangan.kode).then(() => toast("Kode undangan disalin.")) }, ic("salin"), "Salin kode"),
+      h("button", { class: "btn grey small", onclick: () => void salin(undangan.kode).then(() => toast("Kode undangan disalin.")) }, ic("salin"), "Salin kode"),
       h("div", { class: "muted" }, "2. Setelah dia memunculkan QR jawaban, pindai dari HP-mu."),
       h("button", {
         class: "btn blue block",
@@ -494,7 +507,7 @@ async function gabungLokal(): Promise<void> {
         h("div", { class: "sheet-title" }, ic("kartu"), "Tunjukkan ke tuan rumah"),
         h("div", { class: "muted" }, "Tuan rumah menekan Pindai jawaban dan memindai QR ini. Layar ini tertutup sendiri begitu tersambung."),
         kanvas,
-        h("button", { class: "btn grey small", onclick: () => void navigator.clipboard?.writeText(jawaban).then(() => toast("Kode jawaban disalin.")) }, ic("salin"), "Salin kode"),
+        h("button", { class: "btn grey small", onclick: () => void salin(jawaban).then(() => toast("Kode jawaban disalin.")) }, ic("salin"), "Salin kode"),
         h("button", { class: "btn grey block", onclick: () => (tutup(), tamu.keluar()) }, "Batal"),
       ),
       () => undefined,

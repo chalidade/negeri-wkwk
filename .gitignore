@@ -14,3 +14,5 @@ app/env.json
 *.jks
 *.keystore
 app/android/key.properties
+# Kunci unggah Android (PKCS12, dilindungi password acak di GitHub secret WKWK_STORE_PASSWORD)
+!web3d/android/kunci-unggah.p12

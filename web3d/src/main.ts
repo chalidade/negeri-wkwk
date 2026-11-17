@@ -4,7 +4,7 @@ import "@fontsource/plus-jakarta-sans/latin-700.css";
 import "@fontsource/plus-jakarta-sans/latin-800.css";
 import "./style.css";
 import { confirmBox, h, sceneEl, toast, ui } from "./dom.ts";
-import { BACKEND } from "./config.ts";
+import { BACKEND, diAplikasi } from "./config.ts";
 import { hasSoloSave, newSoloGame, resumeSoloGame, type Driver } from "./driver.ts";
 import { layarBareng } from "./online.ts";
 import { startGame } from "./game.ts";
@@ -249,7 +249,8 @@ async function boot(): Promise<void> {
 
 /** Service worker: aset game disimpan di HP, jadi game tetap bisa dibuka tanpa internet. */
 function daftarkanSW(): void {
-  if (!("serviceWorker" in navigator) || import.meta.env.DEV || new URLSearchParams(location.search).has("debug")) return;
+  // di aplikasi Android aset sudah ada di dalam paketnya, service worker tidak diperlukan
+  if (!("serviceWorker" in navigator) || import.meta.env.DEV || diAplikasi() || new URLSearchParams(location.search).has("debug")) return;
   navigator.serviceWorker.register("/sw.js").catch(() => undefined);
 }
 

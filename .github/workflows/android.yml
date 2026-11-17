@@ -1,0 +1,80 @@
+name: Android build
+
+# Bungkus build web (web3d/) jadi aplikasi Android dengan Capacitor.
+# - APK debug: selalu dibuat, bisa langsung dipasang untuk mencoba.
+# - AAB + APK rilis bertanda tangan: dibuat kalau secret WKWK_STORE_PASSWORD sudah diisi.
+# Hasilnya dilampirkan ke GitHub Release "android-terbaru" supaya bisa diunduh dari HP.
+on:
+  push:
+    branches: [main]
+    paths: ["web3d/**", "supabase/functions/_shared/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web3d
+    env:
+      WKWK_VERSION_CODE: ${{ github.run_number }}
+      WKWK_VERSION_NAME: 1.0.${{ github.run_number }}
+      ADA_KUNCI: ${{ secrets.WKWK_STORE_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web3d/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - name: Build web
+        run: npm run build
+      - name: Salin build web ke proyek Android
+        run: npx cap sync android
+      - name: APK debug (untuk dicoba)
+        working-directory: web3d/android
+        run: ./gradlew --no-daemon assembleDebug
+      - name: AAB dan APK rilis (bertanda tangan kunci unggah)
+        if: env.ADA_KUNCI == 'true'
+        working-directory: web3d/android
+        env:
+          WKWK_STORE_PASSWORD: ${{ secrets.WKWK_STORE_PASSWORD }}
+          WKWK_KEY_PASSWORD: ${{ secrets.WKWK_STORE_PASSWORD }}
+          WKWK_KEY_ALIAS: upload
+        run: |
+          export WKWK_KEYSTORE="$GITHUB_WORKSPACE/web3d/android/kunci-unggah.p12"
+          ./gradlew --no-daemon bundleRelease assembleRelease
+      - name: Kumpulkan hasil
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/out/negeri-wkwk-coba.apk"
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/out/negeri-wkwk-${WKWK_VERSION_NAME}.aab"
+            cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/out/negeri-wkwk-${WKWK_VERSION_NAME}.apk"
+          fi
+          ls -la "$RUNNER_TEMP/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ github.run_number }}
+          path: ${{ runner.temp }}/out/*
+      - name: Lampirkan ke release "android-terbaru"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-terbaru --yes --cleanup-tag 2>/dev/null || true
+          gh release create android-terbaru "$RUNNER_TEMP"/out/* --prerelease --target "$GITHUB_SHA" \
+            --title "Android build ${WKWK_VERSION_NAME}" \
+            --notes "Dibangun otomatis dari ${GITHUB_SHA}. negeri-wkwk-coba.apk bisa langsung dipasang untuk mencoba. File .aab untuk diunggah ke Play Console."
