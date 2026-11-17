@@ -65,3 +65,72 @@ export function toggleMute(): boolean {
   localStorage.setItem("wkwk.mute", muted ? "1" : "0");
   return muted;
 }
+
+// ------------------------------------------------------------------ musik latar
+// Gamelan kecil yang disintesis: bilah logam berlaras pelog, gong tiap awal frasa.
+// Tidak ada berkas audio; nadanya dijadwalkan sedikit di depan waktu supaya ketukannya rapat.
+
+let musik = localStorage.getItem("wkwk.musik") !== "0";
+let jadwal: ReturnType<typeof setInterval> | undefined;
+let berikut = 0;
+let langkah = 0;
+let tempoMusik = 0.34;
+const LARAS = [146.83, 155.56, 174.61, 220.0, 233.08, 293.66, 311.13, 349.23, 440.0, 466.16];
+// dua frasa 16 ketuk; angka = bilah, -1 = diam
+const LAGU = [
+  [5, 7, 8, 7, 9, 8, 7, -1, 5, 7, 8, 5, 4, 5, 7, -1],
+  [8, 9, 8, 7, 5, 7, 5, -1, 4, 5, 7, 8, 7, 5, 4, -1],
+  [5, -1, 7, 8, 7, -1, 5, 4, 5, 7, 8, 9, 8, 7, 5, -1],
+];
+
+function bilah(a: AudioContext, f: number, t: number, vol: number, lama: number): void {
+  for (const [kali, v] of [[1, 1], [2.76, 0.28], [5.4, 0.1]] as const) {
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.type = "sine";
+    o.frequency.value = f * kali;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol * v, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + lama / kali);
+    o.connect(g).connect(a.destination);
+    o.start(t);
+    o.stop(t + lama + 0.05);
+  }
+}
+
+function putar(): void {
+  const a = ac();
+  if (!a || !musik) return;
+  while (berikut < a.currentTime + 0.3) {
+    const frasa = LAGU[Math.floor(langkah / 16) % LAGU.length];
+    const k = langkah % 16;
+    const t = Math.max(berikut, a.currentTime + 0.02);
+    if (frasa[k] >= 0) bilah(a, LARAS[frasa[k]], t, 0.035, 1.1);
+    if (k % 4 === 0) bilah(a, LARAS[[0, 3, 2, 3][k / 4]], t, 0.05, 1.8); // balungan: nada pokok yang lambat
+    if (k === 0) bilah(a, 73.42, t, 0.11, 3.6); // gong
+    langkah++;
+    berikut = t + tempoMusik;
+  }
+}
+
+/** Mulai musik latar (aman dipanggil berulang; baru bunyi setelah ada sentuhan pertama). */
+export function mulaiMusik(cepat = false): void {
+  tempoMusik = cepat ? 0.27 : 0.34;
+  if (jadwal || !musik) return;
+  berikut = 0;
+  jadwal = setInterval(putar, 90);
+}
+
+export function hentikanMusik(): void {
+  clearInterval(jadwal);
+  jadwal = undefined;
+}
+
+export const musikNyala = (): boolean => musik;
+export function toggleMusik(): boolean {
+  musik = !musik;
+  localStorage.setItem("wkwk.musik", musik ? "1" : "0");
+  if (musik) mulaiMusik(tempoMusik < 0.3);
+  else hentikanMusik();
+  return musik;
+}

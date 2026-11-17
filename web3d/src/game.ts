@@ -5,8 +5,9 @@ import type { Driver } from "./driver.ts";
 import { HELP_SEEN, FITUR_BARU, recordGame, showHelp } from "./help.ts";
 import { ava, ic, rezimAva } from "./icons.ts";
 import { GameScene } from "./scene/game-scene.ts";
-import { isMuted, sfx, toggleMute } from "./sfx.ts";
+import { isMuted, mulaiMusik, musikNyala, sfx, toggleMusik, toggleMute } from "./sfx.ts";
 import { describe, resultTitle } from "./story.ts";
+import { catatMisi } from "./toko.ts";
 import {
   BABAK,
   BABAK_FITUR,
@@ -79,6 +80,7 @@ export function startGame(
 
   sceneEl.style.display = "block";
   sceneEl.replaceChildren();
+  mulaiMusik(true); // di dalam permainan temponya sedikit lebih cepat
   const scene = new GameScene(sceneEl, (i) => !playing && showTile(i));
   scene.speed = speed;
   scene.onStep = () => sfx.step();
@@ -117,7 +119,7 @@ export function startGame(
     { class: "players" },
     ...playersInOrder(state).map((p) => {
       const badge = h("span", { class: "pbadge" });
-      const el = h("button", { class: "pchip", "aria-label": p.name, onclick: () => showPlayer(p.id) }, ava(p.profession, p.seat), ic("mahkota", "crown"), badge);
+      const el = h("button", { class: `pchip${p.id === me ? " aku" : ""}`, "aria-label": p.name, onclick: () => showPlayer(p.id) }, ava(p.profession, p.seat), ic("mahkota", "crown"), badge);
       const money = h("small", {});
       const stat = h("span", { class: "wrow-stat" });
       const row = h(
@@ -516,6 +518,8 @@ export function startGame(
       const a = e.actor;
       const mine = a === me;
       const line = describe(e, next, me);
+      if (e.type === "demo_akbar") catatMisi("demo");
+      else if (mine && ["beli", "upgrade", "jurus", "petisi"].includes(e.type)) catatMisi(e.type);
       switch (e.type) {
         case "dadu": {
           if (a) scene.focusPawn(a);
@@ -1028,6 +1032,9 @@ export function startGame(
       solo: driver.local,
       maxBabak: MAX_BABAK,
     });
+    catatMisi("main");
+    if (res.win) catatMisi("menang");
+    if (mvp) catatMisi("mvp");
     if (state.result?.kind === "rakyat_menang") {
       sfx.fanfare();
       await scene.collapseIstana();
@@ -1697,7 +1704,10 @@ export function startGame(
   function showMenu(): void {
     const kecepatan = h("button", { class: "btn grey block" });
     const suara = h("button", { class: "btn grey block" });
+    const lagu = h("button", { class: "btn grey block" });
+    lagu.onclick = () => (toggleMusik(), lukis());
     const lukis = () => {
+      lagu.replaceChildren(ic(musikNyala() ? "bunyi" : "senyap"), musikNyala() ? "Musik nyala" : "Musik mati");
       kecepatan.replaceChildren(ic(speed >= 2 ? "cepat" : "main"), speed >= 2 ? "Kecepatan: ngebut 2x" : "Kecepatan: normal");
       suara.replaceChildren(ic(isMuted() ? "senyap" : "bunyi"), isMuted() ? "Suara mati" : "Suara nyala");
     };
@@ -1708,6 +1718,7 @@ export function startGame(
       judul("menu", "Menu"),
       h("button", { class: "btn grey block", onclick: () => (close(), showHelp()) }, ic("tanya"), "Cara main"),
       suara,
+      lagu,
       kecepatan,
       h("button", { class: "btn grey block", onclick: () => (close(), showLog()) }, ic("riwayat"), "Riwayat"),
       h("button", { class: "btn red block", onclick: () => (close(), confirmExit()) }, ic("keluar"), "Keluar"),

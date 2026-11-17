@@ -1,9 +1,9 @@
 // Tekstur digambar di canvas saat runtime, jadi tidak perlu file gambar.
 import * as THREE from "three";
-import { GROUP_COLOR, TILE_ICON, drPendek, type TileDef } from "../shared.ts";
+import { ikonSvg } from "../icons.ts";
+import { GROUP_COLOR, drPendek, type TileDef } from "../shared.ts";
 
 const DISPLAY = '"Bagel Fat One", "Arial Black", sans-serif';
-const EMOJI = '"Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif';
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement("canvas");
@@ -46,7 +46,13 @@ const SPECIAL_BG: Record<string, [string, string]> = {
 };
 
 /** Sisi atas petak. Bagian bawah canvas menghadap kamera. */
+const IKON_PETAK: Record<string, string> = {
+  start: "uang", jail: "gembok", go_to_jail: "sirene", card_wa: "chat", card_nasib: "kartu",
+  tax: "petisi", gov_seat: "kursi", demo: "toa", lumbung: "karung",
+};
+
 export function tileTexture(t: TileDef): THREE.CanvasTexture {
+  let ikon: string | null = null;
   const S = 256;
   const [c, ctx] = canvas(S, S);
   ctx.textAlign = "center";
@@ -86,9 +92,15 @@ export function tileTexture(t: TileDef): THREE.CanvasTexture {
     g.addColorStop(1, b);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, S, S);
-    ctx.font = `112px ${EMOJI}`;
-    ctx.fillStyle = "#222";
-    ctx.fillText(TILE_ICON[t.type] ?? "❔", S / 2, 88);
+    // stiker bundar putih; ikonnya (gambar sendiri, bukan emoji) menyusul begitu selesai dimuat
+    ctx.fillStyle = "#fffdf7";
+    ctx.strokeStyle = "#1b2440";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(S / 2, 86, 60, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ikon = IKON_PETAK[t.type] ?? null;
     const dark = t.type === "gov_seat" || t.type === "go_to_jail";
     ctx.font = `38px ${DISPLAY}`;
     ctx.lineWidth = 7;
@@ -106,7 +118,16 @@ export function tileTexture(t: TileDef): THREE.CanvasTexture {
   ctx.strokeStyle = "rgba(0,0,0,0.18)";
   ctx.lineWidth = 6;
   ctx.strokeRect(3, 3, S - 6, S - 6);
-  return toTexture(c);
+  const tex = toTexture(c);
+  if (ikon) {
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, S / 2 - 46, 40, 92, 92);
+      tex.needsUpdate = true;
+    };
+    img.src = `data:image/svg+xml;utf8,${encodeURIComponent(ikonSvg(ikon))}`;
+  }
+  return tex;
 }
 
 /** Halaman tengah: rumput dengan jalan setapak menuju Istana. */

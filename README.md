@@ -59,6 +59,12 @@ Tes database butuh PostgreSQL 15+ atau Docker: `npm run test:db`.
 - Integrasi GitHub Supabase men-deploy migration dan Edge Functions yang terdaftar di `supabase/config.toml`.
 - Rilis ke Play Store dan App Store: lihat `RELEASE.md`.
 
+## Emas Antum, misi, musik
+
+- **Toko** (`web3d/src/toko.ts`): Emas Antum dibelanjakan untuk hiasan saja: warna kartu warga, warna mata dadu, bingkai avatar. Tidak memengaruhi peluang menang.
+- **Misi harian:** tiga misi berganti tiap hari, hadiahnya Emas Antum.
+- **Musik latar:** gamelan kecil hasil sintesis di `web3d/src/sfx.ts`, tanpa berkas audio. Bisa dimatikan dari menu.
+
 ## Gaya visual
 
 Arah desain "stopmap & stempel": warna datar, garis tinta, bayangan keras, tanpa gradasi. Beranda berupa kartu warga (nama, pekerjaan, pangkat sebagai stempel). Huruf: Bagel Fat One untuk judul dan Plus Jakarta Sans untuk teks. Ikon dan avatar digambar sendiri di `web3d/src/icons.ts` (topi avatar sama dengan topi pion 3D), jadi antarmuka tidak bergantung pada emoji bawaan HP.

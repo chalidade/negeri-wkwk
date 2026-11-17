@@ -102,6 +102,14 @@ export function getStats(): Stats {
   }
 }
 
+/** Tambah atau kurangi Emas Antum (belanja di toko, hadiah misi). */
+export function ubahEmas(delta: number): number {
+  const s = getStats();
+  s.emas = Math.max(0, s.emas + delta);
+  localStorage.setItem(STATS_KEY, JSON.stringify(s));
+  return s.emas;
+}
+
 /** Catat hasil satu permainan dan hitung hadiahnya. */
 export function recordGame(o: {
   win: boolean;

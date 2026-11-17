@@ -9,7 +9,8 @@ import { hasSoloSave, newSoloGame, onlineGame, resumeSoloGame, type Driver } fro
 import { startGame } from "./game.ts";
 import { getStats, showHelp } from "./help.ts";
 import { ava, ic, rezimAva } from "./icons.ts";
-import { sfx } from "./sfx.ts";
+import { mulaiMusik, sfx } from "./sfx.ts";
+import { ringkasMisi, showMisi, showToko, terapkanKosmetik } from "./toko.ts";
 import {
   BABAK,
   JURUS,
@@ -48,6 +49,7 @@ function runGame(driver: Driver, onReplay?: (level: number) => void): void {
 
 /** Beranda: kartu warga (nama, pekerjaan, pangkat) jadi pusatnya, lalu lawan dan tombol main. */
 function homeScreen(): void {
+  mulaiMusik(false);
   const st = getStats();
   const pk = pangkat(st.xp);
   const name = h("input", { placeholder: "Tulis namamu", maxLength: 24, value: savedName(), "aria-label": "Nama warga" });
@@ -126,6 +128,7 @@ function homeScreen(): void {
   paintBabak();
 
   const adaSimpanan = hasSoloSave();
+  const misi = ringkasMisi();
   show(
     h(
       "div",
@@ -173,6 +176,12 @@ function homeScreen(): void {
           ? h("button", { class: "btn grey block", onclick: () => solo(false) }, ic("dadu"), `Mulai baru dari babak ${st.babak}`)
           : h("button", { class: "btn big red block", onclick: () => solo(false) }, ic("dadu"), "Main sekarang"),
         h("div", { class: "catatan" }, "Solo bareng 3 warga bot. Bisa tanpa internet."),
+        h(
+          "div",
+          { class: "row dua" },
+          h("button", { class: `btn grey${misi.adaHadiah ? " titik" : ""}`, onclick: () => showMisi(() => homeScreen()) }, ic("bintang"), `Misi ${misi.selesai}/${misi.total}`),
+          h("button", { class: "btn grey", onclick: () => showToko(() => homeScreen()) }, ic("koin"), `Toko, ${st.emas} emas`),
+        ),
         h(
           "button",
           {
@@ -448,6 +457,9 @@ async function boot(): Promise<void> {
     document.fonts.load('800 16px "Plus Jakarta Sans"'),
     document.fonts.load('600 16px "Plus Jakarta Sans"'),
   ]).catch(() => undefined);
+  terapkanKosmetik();
+  // peramban baru mengizinkan suara setelah sentuhan pertama
+  addEventListener("pointerdown", () => mulaiMusik(), { once: true });
   homeScreen();
 }
 

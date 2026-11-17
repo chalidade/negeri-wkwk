@@ -51,8 +51,15 @@ const ICONS: Record<string, string> = {
   mobil: `<path d="M3 16.400v-3.600l2.200-.8 1.800-4.400h10l1.800 4.400 2.200.8v3.600z" fill="${INK}"/><circle cx="7.400" cy="16.600" r="2" fill="${PUTIH}"/><circle cx="16.600" cy="16.600" r="2" fill="${PUTIH}"/><path d="M8.400 8.800h7.200l1 2.600H7.400z" fill="${LANGIT}" stroke-width="1.400"/>`,
   chat: `<path d="M4 5.600h16v10.400h-8.400L7 20v-4H4z" fill="${PUTIH}"/><path d="M8 9.600h8M8 12.600h5"/>`,
   bencana: `<path d="M2.600 20 9.400 8.400h5.200L21.400 20z" fill="#8a5a32"/><path d="M9.400 8.400l1.600 2.400 1.400-1.600 1.200 1.800 1-2.600" fill="${MERAH}"/><path d="M11 5.400c-.800-1.200.400-2 0-3M14 5.600c.800-1 .200-1.800.600-2.800"/>`,
+  sirene: `<path d="M7 17v-4.500a5 5 0 0 1 10 0V17z" fill="${MERAH}"/><path d="M4.500 20.400h15V17h-15z" fill="${PUTIH}"/><path d="M12 3.200v2M4.400 6.400l1.500 1.500M19.600 6.400l-1.500 1.500"/>`,
+  kursi: `<path d="M7.500 3.600h9v9h-9z" fill="#b9793f"/><path d="M5.600 12.600h12.800V16H5.600z" fill="#e0a15f"/><path d="M7 16v4.800M17 16v4.800"/>`,
   kartu: `<rect x="5.600" y="3.600" width="12.800" height="16.800" rx="2.400" fill="${PUTIH}"/><path d="M12 8.400l2.400 3.600-2.400 3.600-2.400-3.600z" fill="${MERAH}" stroke-width="1.600"/>`,
 };
+
+/** SVG utuh sebuah ikon, untuk digambar ke kanvas (tekstur petak di papan 3D). */
+export function ikonSvg(name: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${INK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] ?? ""}</svg>`;
+}
 
 /** Ikon satu baris teks. Ukurannya mengikuti font-size induknya. */
 export function ic(name: keyof typeof ICONS | string, cls = ""): HTMLElement {
