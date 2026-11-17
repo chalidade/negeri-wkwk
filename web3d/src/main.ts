@@ -4,7 +4,7 @@ import "@fontsource/plus-jakarta-sans/latin-700.css";
 import "@fontsource/plus-jakarta-sans/latin-800.css";
 import "./style.css";
 import { confirmBox, h, sceneEl, toast, ui } from "./dom.ts";
-import { BACKEND, diAplikasi } from "./config.ts";
+import { BACKEND, WEB_URL, diAplikasi } from "./config.ts";
 import { hasSoloSave, newSoloGame, resumeSoloGame, type Driver } from "./driver.ts";
 import { layarBareng } from "./online.ts";
 import { startGame } from "./game.ts";
@@ -218,7 +218,7 @@ function homeScreen(): void {
           ic("warga"),
           "Main bareng teman",
         ),
-        h("div", { class: "catatan small" }, "Game satire fiksi. Tidak mewakili lembaga, partai, atau tokoh nyata."),
+        h("div", { class: "catatan small" }, "Game satire fiksi. Tidak mewakili lembaga, partai, atau tokoh nyata. ", h("a", { href: `${diAplikasi() ? WEB_URL : ""}/privasi.html`, target: "_blank", rel: "noopener" }, "Kebijakan privasi")),
       ),
     ),
   );

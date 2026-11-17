@@ -473,3 +473,4 @@ label { font-size: 13px; font-weight: 700; color: var(--teks2); }
 .logo-img { margin: 4px auto 0; max-width: 300px; }
 @media (max-width: 360px) { .logo-img { max-width: 260px; } }
 @media (max-width: 340px) { .logo-img { max-width: 230px; } .stempel { font-size: 9px; } }
+.catatan a { color: inherit; font-weight: 800; }
