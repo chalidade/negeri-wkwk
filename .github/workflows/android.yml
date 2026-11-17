@@ -26,7 +26,8 @@ jobs:
     env:
       WKWK_VERSION_CODE: ${{ github.run_number }}
       WKWK_VERSION_NAME: 1.0.${{ github.run_number }}
-      ADA_KUNCI: ${{ secrets.WKWK_STORE_PASSWORD != '' }}
+      # password kunci dari Secret (disarankan) atau Variable dengan nama yang sama
+      ADA_KUNCI: ${{ (secrets.WKWK_STORE_PASSWORD || vars.WKWK_STORE_PASSWORD) != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,8 +52,8 @@ jobs:
         if: env.ADA_KUNCI == 'true'
         working-directory: web3d/android
         env:
-          WKWK_STORE_PASSWORD: ${{ secrets.WKWK_STORE_PASSWORD }}
-          WKWK_KEY_PASSWORD: ${{ secrets.WKWK_STORE_PASSWORD }}
+          WKWK_STORE_PASSWORD: ${{ secrets.WKWK_STORE_PASSWORD || vars.WKWK_STORE_PASSWORD }}
+          WKWK_KEY_PASSWORD: ${{ secrets.WKWK_STORE_PASSWORD || vars.WKWK_STORE_PASSWORD }}
           WKWK_KEY_ALIAS: upload
         run: |
           export WKWK_KEYSTORE="$GITHUB_WORKSPACE/web3d/android/kunci-unggah.p12"
