@@ -446,6 +446,72 @@ describe("Dadu Nasib & buzzer", () => {
     assert.ok(r.events.every((e) => e.actor !== "budi" || e.type === "giliran"));
   });
 
+  it("amplop: pemain ditawari suap, menerima berarti jadi buzzer, menolak berarti Rezim cari orang lain", () => {
+    const awal = () => {
+      const s = setup();
+      s.round = 2;
+      s.rahasia.rekrut = true;
+      s.rahasia.suapManusia = true;
+      s.players.andi.cuan = 3 * JT; // paling kepepet: paling mungkin didekati
+      s.turn = 3;
+      s.phase = "awaiting_end";
+      // peluang rekrut 1 <= 28, bobot 1 = warga termiskin, kebijakan ke-5, dadu Rezim 1+1
+      return act(s, "dewi", { type: "end_turn" }, [1, 1, 5, 1, 1]).state;
+    };
+    const s = awal();
+    assert.equal(s.rahasia.tawaran, "andi");
+    assert.equal(s.rahasia.buzzer, null);
+    assert.throws(() => act(s, "andi", { type: "sabotase" }), (e: GameError) => e.code === "bukan_buzzer");
+    const uang = s.players.andi.cuan;
+    const terima = act(s, "andi", { type: "jawab_suap", terima: true });
+    assert.equal(terima.state.rahasia.buzzer, "andi");
+    assert.equal(terima.state.players.andi.cuan, uang + R.SUAP_JUMLAH);
+    assert.deepEqual(terima.state.lastEvents, []); // tidak ada jejak publik
+    const tolak = act(awal(), "andi", { type: "jawab_suap", terima: false });
+    assert.equal(tolak.state.rahasia.buzzer, null);
+    assert.deepEqual(tolak.state.rahasia.ditolak, ["andi"]);
+    assert.equal(tolak.state.rahasia.rekrut, true);
+  });
+
+  it("buzzer memilih sabotasenya: melaporkan warga tertentu, atau alibi pura-pura ikut ditangkap", () => {
+    const s = denganBuzzer();
+    s.turn = 1;
+    assert.throws(() => act(s, "budi", { type: "sabotase", jenis: "lapor", target: "budi" }), (e: GameError) => e.code === "target_tidak_valid");
+    const lapor = act(s, "budi", { type: "sabotase", jenis: "lapor", target: "citra" }).state;
+    lapor.turn = 3;
+    lapor.phase = "awaiting_end";
+    const uang = lapor.players.budi.cuan;
+    // jejak tidak muncul (99 > 60), kebijakan ke-5 (bansos +500 rb), dadu Rezim 1+1
+    const r = act(lapor, "dewi", { type: "end_turn" }, [99, 5, 1, 1]);
+    assert.equal(r.state.players.citra.jailTurns, R.LAMA_TILANG);
+    assert.equal(r.state.players.budi.cuan, uang + R.SUAP_GAJI + 500_000);
+
+    const t = act(s, "budi", { type: "sabotase", jenis: "alibi" }).state;
+    t.jejak = { budi: 2 };
+    t.turn = 3;
+    t.phase = "awaiting_end";
+    const a = act(t, "dewi", { type: "end_turn" }, [5, 1, 1]);
+    const ev = a.events.find((e) => e.type === "sabotase")!;
+    assert.deepEqual(ev.payload, { jenis: "lapor", korban: "budi" }); // dari luar: sama dengan korban sungguhan
+    assert.equal(a.state.players.budi.jailTurns, R.LAMA_TILANG);
+    assert.equal(a.state.jejak.budi, 1);
+  });
+
+  it("buzzer manusia terakhir diusir sidang: permainan berhenti", () => {
+    const members = [
+      { id: "andi", name: "andi", seat: 0, profession: "buruh" as const },
+      ...["b1", "b2", "b3"].map((id, i) => ({ id, name: id, seat: i + 1, profession: "buruh" as const, bot: true })),
+    ];
+    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, "andi", false, true);
+    s.turn = 1;
+    // bot memanggil sidang; ketiga bot langsung memilih andi (jejaknya tebal)
+    s.jejak = { andi: 9 };
+    const r = act(s, "b1", { type: "sidang" });
+    const akhir = r.state.phase === "voting" ? act(r.state, "andi", { type: "vote", target: null }).state : r.state;
+    assert.equal(akhir.result?.kind, "buzzer_terusir");
+    assert.equal(akhir.players.andi.buzzer, true);
+  });
+
   it("Rezim menyuap bot yang paling kepepet di tengah permainan", () => {
     const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession, bot: i > 0 }));
     const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, null, true, true);

@@ -88,6 +88,8 @@ export interface Sidang {
 export type GameResult =
   | { kind: "rakyat_menang" }
   | { kind: "rakyat_kalah"; reason: "bangkrut" | "pemilu" }
+  /** buzzer-nya pemain manusia terakhir dan dia diusir: permainan berhenti */
+  | { kind: "buzzer_terusir" }
   | { kind: "juragan_menang"; winner: string };
 
 export interface GameState {
@@ -127,6 +129,14 @@ export interface GameState {
     antre: number;
     /** Rezim masih mencari warga untuk disuap di tengah permainan */
     rekrut: boolean;
+    /** sabotase pilihan buzzer untuk akhir ronde ini (kosong = acak) */
+    rencana?: { jenis: Sabotase; target?: string } | null;
+    /** pemain manusia juga boleh ditawari amplop (hanya permainan solo) */
+    suapManusia?: boolean;
+    /** pemain yang sedang ditawari amplop dan belum menjawab */
+    tawaran?: string | null;
+    /** yang sudah menolak amplop: tidak akan ditawari lagi */
+    ditolak?: string[];
   };
   /** grup warna yang sudah pernah jadi Kampung Mandiri */
   kampung: string[];
@@ -151,6 +161,12 @@ export interface GameState {
   lastEvents: GameEvent[];
 }
 
+/**
+ * Sabotase buzzer: tagar tandingan, menilep Lumbung, melaporkan warga, memoles citra Rezim,
+ * atau "alibi": pura-pura ikut ditangkap supaya tidak dicurigai.
+ */
+export type Sabotase = "tagar" | "tilep" | "lapor" | "citra" | "alibi";
+
 /** Tenaga lemparan dadu: menentukan kisaran jumlah mata dadu. */
 export type Gaya = "pelan" | "sedang" | "kencang";
 
@@ -163,7 +179,8 @@ export type Action =
   | { type: "bayar_utang"; amount: number }
   | { type: "bantu"; target: string; amount: number }
   | { type: "jurus" }
-  | { type: "sabotase" }
+  | { type: "sabotase"; jenis?: Sabotase; target?: string }
+  | { type: "jawab_suap"; terima: boolean }
   | { type: "sidang" }
   | { type: "vote"; target: string | null }
   | { type: "buy"; jalur?: Jalur }

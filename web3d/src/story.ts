@@ -124,9 +124,17 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
   }
 }
 
-export function resultTitle(s: GameState, me: string): { title: string; sub: string; win: boolean } {
+export function resultTitle(s: GameState, me: string, akuBuzzer = false): { title: string; sub: string; win: boolean } {
   const r = s.result;
   if (!r) return { title: "Selesai", sub: "", win: false };
+  if (r.kind === "buzzer_terusir") {
+    return { title: "Kamu Ketahuan!", sub: "Warga mengusirmu lewat Sidang. Uang amplopnya masuk Lumbung.", win: false };
+  }
+  if (akuBuzzer && !s.players[me]?.bankrupt) {
+    return r.kind === "rakyat_kalah"
+      ? { title: "Rezim Selamat", sub: "Kamu buzzer yang lolos sampai akhir. Amplop aman, nurani belum tentu.", win: true }
+      : { title: "Tuanmu Tumbang", sub: "Rezim jatuh, dan kamu ikut jatuh. Buzzer yang gagal.", win: false };
+  }
   if (r.kind === "rakyat_menang") {
     return { title: "REZIM TUMBANG!", sub: `Rakyat menang di ronde ${s.round} lewat ${s.demoCount} Demo Akbar.`, win: true };
   }

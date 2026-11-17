@@ -196,7 +196,25 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
       requirePhase(s, "awaiting_roll", "awaiting_end");
       if (s.rahasia.buzzer !== actor.id || actor.buzzer) throw new GameError("bukan_buzzer", "Aksi tidak dikenal.");
       if (s.rahasia.antre > 0) throw new GameError("sabotase_antre", "Sabotase ronde ini sudah disiapkan.");
+      if (action.jenis === "lapor") {
+        const t = s.players[action.target ?? ""];
+        if (!t || t.id === actor.id || t.bankrupt) throw new GameError("target_tidak_valid", "Warga itu tidak bisa dilaporkan.");
+      }
       s.rahasia.antre = 1; // efeknya baru muncul di akhir ronde, tanpa nama pelaku
+      s.rahasia.rencana = action.jenis ? { jenis: action.jenis, ...(action.target ? { target: action.target } : {}) } : null;
+      break;
+    case "jawab_suap":
+      if (s.rahasia.tawaran !== actor.id) throw new GameError("tidak_ada_tawaran", "Tidak ada tawaran untukmu.");
+      s.rahasia.tawaran = null;
+      if (action.terima) {
+        // diam-diam: tidak ada event publik, cuma uangnya yang bertambah
+        transfer(ctx, BANK, actor.id, R.SUAP_JUMLAH);
+        s.rahasia.buzzer = actor.id;
+        s.rahasia.rekrut = false;
+      } else {
+        s.rahasia.ditolak = [...(s.rahasia.ditolak ?? []), actor.id];
+        jasa(ctx, actor.id, 5);
+      }
       break;
     case "sidang":
       requirePhase(s, "awaiting_roll", "awaiting_end");
@@ -785,6 +803,8 @@ function sabotaseBuzzer(ctx: Ctx): void {
   s.rahasia.antre = 0;
   if (s.players[id].bankrupt || s.players[id].buzzer) return;
 
+  const rencana = s.rahasia.rencana ?? null;
+  s.rahasia.rencana = null;
   const pilihan: string[] = [];
   if (s.semangat >= R.SABOTASE_SEMANGAT) pilihan.push("tagar");
   if (s.lumbung >= 1_500_000) pilihan.push("tilep");
@@ -792,17 +812,29 @@ function sabotaseBuzzer(ctx: Ctx): void {
   if (vokal && vokal.jasa > 0) pilihan.push("lapor");
   // memoles citra Rezim selalu bisa: kepercayaan publik naik pelan-pelan selama buzzer belum ketahuan
   pilihan.push("citra");
-  const jenis = pickRandom(ctx.rng, pilihan);
+  // buzzer yang memilih sendiri (pemain manusia, atau bot yang sedang butuh alibi) tidak diacak
+  const jenis = rencana ? rencana.jenis : pickRandom(ctx.rng, pilihan);
+  const sasaran = rencana?.jenis === "lapor" ? s.players[rencana.target ?? ""] : vokal;
 
+  // bayaran dari Rezim, tanpa event: yang kelihatan cuma uangnya bertambah
+  transfer(ctx, BANK, id, R.SUAP_GAJI);
+
+  if (jenis === "alibi") {
+    // Pura-pura ikut jadi korban: dari luar terlihat persis seperti warga yang dilaporkan buzzer.
+    emit(ctx, { type: "sabotase", payload: { jenis: "lapor", korban: id } });
+    sendToJail(ctx, id, "dilaporkan");
+    if ((s.jejak[id] ?? 0) > 0) s.jejak[id] -= 1; // satu jejak ke dirinya ikut "hilang"
+    return;
+  }
   if (jenis === "tilep") {
     const jumlah = transfer(ctx, LUMBUNG, BANK, R.bulat(s.lumbung * R.SABOTASE_LUMBUNG));
     emit(ctx, { type: "sabotase", payload: { jenis, jumlah } });
   } else if (jenis === "citra") {
     emit(ctx, { type: "sabotase", payload: { jenis, naik: citra(s, R.SABOTASE_CITRA) } });
     healRezim(ctx, citra(s, R.SABOTASE_CITRA), "pencitraan");
-  } else if (jenis === "lapor" && vokal) {
-    emit(ctx, { type: "sabotase", payload: { jenis, korban: vokal.id } });
-    sendToJail(ctx, vokal.id, "dilaporkan");
+  } else if (jenis === "lapor" && sasaran && !sasaran.bankrupt && sasaran.jailTurns === 0) {
+    emit(ctx, { type: "sabotase", payload: { jenis, korban: sasaran.id } });
+    sendToJail(ctx, sasaran.id, "dilaporkan");
   } else {
     emit(ctx, { type: "sabotase", payload: { jenis: "tagar" } });
     addSemangat(ctx, -R.SABOTASE_SEMANGAT, "sabotase");
@@ -823,16 +855,24 @@ function sabotaseBuzzer(ctx: Ctx): void {
  */
 function rekrutBuzzer(ctx: Ctx): void {
   const s = ctx.s;
-  if (!s.rahasia.rekrut || s.rahasia.buzzer || s.round < 2 || !punya(s, "buzzer")) return;
+  if (!s.rahasia.rekrut || s.rahasia.buzzer || s.rahasia.tawaran || s.round < 2 || !punya(s, "buzzer")) return;
   if (ctx.rng.int(1, 100) > R.PELUANG_REKRUT * 100) return;
-  // Hanya bot yang bisa disuap; pemain manusia tidak pernah diubah perannya diam-diam.
-  const calon = alivePlayers(s).filter((p) => p.bot && !s.bersih.includes(p.id)).sort((a, b) => a.cuan - b.cuan);
+  // Bot langsung disuap. Pemain manusia tidak pernah diubah perannya diam-diam: dia ditawari amplop
+  // dan memilih sendiri (hanya di permainan solo).
+  const ditolak = s.rahasia.ditolak ?? [];
+  const calon = alivePlayers(s)
+    .filter((p) => (p.bot || s.rahasia.suapManusia) && !s.bersih.includes(p.id) && !ditolak.includes(p.id))
+    .sort((a, b) => a.cuan - b.cuan);
   if (calon.length === 0) return;
   // bobot: termiskin paling berat
   const bobot = calon.map((_, i) => calon.length - i);
   let acak = ctx.rng.int(1, bobot.reduce((a, b) => a + b, 0));
   let pilih = 0;
   while (acak > bobot[pilih]) acak -= bobot[pilih++];
+  if (!calon[pilih].bot) {
+    s.rahasia.tawaran = calon[pilih].id; // menunggu jawabannya; Rezim belum mencari orang lain
+    return;
+  }
   s.rahasia.buzzer = calon[pilih].id;
   s.rahasia.rekrut = false;
 }
@@ -934,6 +974,8 @@ function usir(ctx: Ctx, id: string): void {
     emit(ctx, { type: "buzzer_terbongkar", actor: ctx.oleh ?? undefined, payload: { target: id } });
     addSemangat(ctx, R.BONGKAR_SEMANGAT, "buzzer_terbongkar");
     hitRezim(ctx, R.BONGKAR_DAMAGE, "buzzer_terbongkar");
+    // kalau yang diusir itu pemain manusia terakhir, tidak ada lagi yang menonton: selesai
+    if (!isOver(s) && s.order.some((pid) => !s.players[pid].bot) && !hidup.some((x) => !x.bot)) endGame(ctx, { kind: "buzzer_terusir" });
     return;
   }
 

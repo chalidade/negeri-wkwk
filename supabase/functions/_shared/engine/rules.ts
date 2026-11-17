@@ -184,3 +184,8 @@ export const APARAT_SISA_SEMANGAT = 20;
 /** Mekanik yang baru terbuka di babak tertentu, supaya pemain baru tidak langsung kewalahan. */
 export type Fitur = "pelicin" | "aparat" | "pinjol" | "buzzer" | "anggaran";
 export const BABAK_FITUR: Record<Fitur, number> = { pelicin: 2, aparat: 2, pinjol: 3, buzzer: 3, anggaran: 4 };
+
+/** Isi amplop saat Rezim menyuap seorang warga jadi buzzer. */
+export const SUAP_JUMLAH = 4_000_000;
+/** Bayaran buzzer tiap sabotasenya terlaksana. */
+export const SUAP_GAJI = 500_000;

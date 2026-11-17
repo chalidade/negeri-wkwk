@@ -115,6 +115,8 @@ export function newSoloGame(name: string, profession: Profession | null, mode: M
   // Siapa dan kapan ditentukan engine, jadi tidak ada yang tahu dari awal.
   const rekrut = mode === "rakyat_bersatu" && bots > 0 && cryptoRng.int(1, 10) <= 8;
   const state = createInitialState("solo", mode, members, cryptoRng, level, null, rekrut);
+  // Di solo, amplop Rezim bisa juga disodorkan ke pemain: dia sendiri yang memilih terima atau tolak.
+  state.rahasia.suapManusia = true;
   const roles: Record<string, Role> = {};
   for (const id of state.order) roles[id] = "rakyat";
   const save: SoloSave = { version: 1, state, roles };

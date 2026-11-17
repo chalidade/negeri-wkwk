@@ -2,7 +2,7 @@
 import { ApiError, type GameRow } from "./api.ts";
 import { h, modal, sceneEl, toast, ui } from "./dom.ts";
 import type { Driver } from "./driver.ts";
-import { HELP_SEEN, FITUR_BARU, recordGame, showHelp } from "./help.ts";
+import { HELP_SEEN, FITUR_BARU, recordGame, showHelp, ubahEmas } from "./help.ts";
 import { ava, ic, rezimAva } from "./icons.ts";
 import { GameScene } from "./scene/game-scene.ts";
 import { isMuted, mulaiMusik, musikNyala, sfx, toggleMusik, toggleMute } from "./sfx.ts";
@@ -31,7 +31,10 @@ import {
   PROFESSION_SKILL,
   REBUT_DAMAGE,
   REZIM_KENA,
+  SABOTASE_SEMANGAT,
   SEMANGAT_TITIK_DEMO,
+  SUAP_GAJI,
+  SUAP_JUMLAH,
   TILES,
   batasPanik,
   biayaUpgrade,
@@ -91,6 +94,8 @@ export function startGame(
   const wait = (ms: number) => new Promise<void>((r) => (disposed ? r() : setTimeout(r, ms / (speed * tempo))));
   const nm = (id: string | undefined) => (id === me ? "Kamu" : (state.players[id ?? ""]?.name ?? "Warga"));
   const myTurn = () => state.phase !== "game_over" && state.order[state.turn] === me;
+  /** aku buzzer yang belum ketahuan? (di solo terbaca dari state; di online dari peran rahasia) */
+  const akuBuzzer = () => !state.players[me]?.buzzer && (state.rahasia?.buzzer === me || driver.role() === "buzzer");
   /** mekanik ini sudah terbuka di permainan ini? (bertahap per babak) */
   const ada = (f: Parameters<typeof punya>[1]) => punya(state, f);
 
@@ -996,6 +1001,7 @@ export function startGame(
       if (aku && !aku.bankrupt && state.sidang && state.sidang.suara[me] === undefined) showVote();
       return;
     }
+    if (driver.local && state.rahasia?.tawaran === me && myTurn()) return tawaranSuap();
     const cur = state.players[state.order[state.turn]];
     if (!cur?.bot || !state.players[me]) return;
     // Online: kalau ada beberapa manusia, yang kursinya paling depan jadi penggerak utama.
@@ -1018,12 +1024,15 @@ export function startGame(
     if (overShown) return;
     overShown = true;
     driver.forget();
-    const res = resultTitle(state, me);
+    const sebagaiBuzzer = state.rahasia?.buzzer === me || driver.role() === "buzzer";
+    const res = resultTitle(state, me, sebagaiBuzzer);
+    const menangBuzzer = res.win && sebagaiBuzzer;
+    if (menangBuzzer) ubahEmas(10);
     const meP = state.players[me];
     const urut = [...playersInOrder(state)].sort((x, y) => (coop ? y.jasa - x.jasa : netWorth(state, y) - netWorth(state, x)));
     const mvp = coop && !!meP && urut[0].id === me && meP.jasa > 0;
     const { stats, hadiah } = recordGame({
-      win: res.win,
+      win: res.win && !menangBuzzer, // menang sebagai buzzer tidak membuka babak berikutnya
       round: state.round,
       maxRounds: state.maxRounds,
       level: state.level,
@@ -1071,6 +1080,7 @@ export function startGame(
         ),
         h("div", { class: "reward" }, h("b", {}, `+${hadiah.xp} XP`), hadiah.emas > 0 ? h("b", {}, ic("koin"), `+${hadiah.emas} Emas Antum`) : null),
         h("div", { class: "xpbar" }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` }), h("b", {}, pk.berikut ? `${pk.nama}, menuju ${pk.berikut}` : pk.nama)),
+        menangBuzzer ? h("div", { class: "muted small" }, "Menang sebagai buzzer: +10 Emas Antum, tapi babak berikutnya tidak terbuka.") : null,
         hadiah.babakBaru ? h("div", { class: "unlock" }, ic("gembok"), `Babak ${hadiah.babakBaru} terbuka: ${BABAK[hadiah.babakBaru - 1].nama}`) : null,
         coop
           ? h(
@@ -1358,7 +1368,7 @@ export function startGame(
       );
     } else if (state.phase === "awaiting_roll") {
       const bebas = !meP.skipNext && meP.jailTurns === 0;
-      pill = meP.skipNext ? "Giliranmu dilewati" : meP.jailTurns > 0 ? "Ditilang: dadu kembar, atau bayar lewat Aksi" : "Tahan dadu, lepas saat pas";
+      pill = akuBuzzer() && !state.rahasia?.antre && !meP.skipNext && meP.jailTurns === 0 ? "Siapkan sabotase lewat Aksi, lalu lempar" : meP.skipNext ? "Giliranmu dilewati" : meP.jailTurns > 0 ? "Ditilang: dadu kembar, atau bayar lewat Aksi" : "Tahan dadu, lepas saat pas";
       const btn = h(
         "button",
         { class: "dicebtn", disabled: locked },
@@ -1420,7 +1430,8 @@ export function startGame(
     aksiBtn.disabled = locked;
     if (tampilAksi) {
       const o = peluang();
-      aksiBtn.classList.toggle("dot", state.phase !== "awaiting_buy" && (o.jurusBisa || (!o.rolling && o.bisaUpgrade)));
+      const perluSabotase = akuBuzzer() && !state.rahasia?.antre;
+      aksiBtn.classList.toggle("dot", state.phase !== "awaiting_buy" && (o.jurusBisa || perluSabotase || (!o.rolling && o.bisaUpgrade)));
     }
     bottom.replaceChildren(
       ...[
@@ -1553,6 +1564,10 @@ export function startGame(
     const rows: (HTMLElement | null)[] = beli
       ? []
       : [
+          akuBuzzer()
+            ? arow("kaca", "Sabotase", "Tugas buzzer: satu per ronde, tanpa nama", state.rahasia?.antre ? "siap" : drPendek(SUAP_GAJI), !state.rahasia?.antre,
+                "Sabotase ronde ini sudah disiapkan. Muncul di akhir ronde.", () => (close(), showSabotase()))
+            : null,
           arow("petir", `Jurus ${jr.nama}`, jr.efek, o.jurusSiap ? "SIAP" : `${meP.jurus}/${JURUS_PENUH}`, o.jurusBisa,
             o.jurusSiap ? "Jalan Tikus dipakai setelah kamu melempar dadu." : "Jurus terisi satu tiap giliranmu.", lakukan({ type: "jurus" })),
           arow("naik", "Upgrade usaha", "Omzet naik, pejabat yang mampir makin rugi", o.punyaUsaha ? "pilih" : "—", o.punyaUsaha,
@@ -1693,7 +1708,7 @@ export function startGame(
       row("Uang", dr(p.cuan)),
       p.utang > 0 ? row("Utang pinjol", dr(p.utang)) : null,
       row("Total harta", dr(netWorth(state, p))),
-      id === me && driver.role() === "buzzer" ? h("div", { class: "tag", style: "background:#3a3f4b" }, "Kamu buzzer") : null,
+      id === me && akuBuzzer() ? h("div", { class: "tag", style: "background:#3a3f4b" }, "Kamu buzzer. Jangan sampai ketahuan") : null,
       usaha.length > 0
         ? h("div", { class: "muted" }, `Usaha: ${usaha.map((x) => `${TILES[x.i].name} (${LEVEL_LABEL[x.t.level]})`).join(", ")}`)
         : h("div", { class: "muted" }, "Belum punya usaha."),
@@ -1738,6 +1753,65 @@ export function startGame(
       ada("anggaran") ? row("Kas Rezim", `${dr(state.kas ?? 0)} dari ${dr(BELANJA_PER_WARGA * state.order.length)}`) : null,
       ada("anggaran") ? h("div", { class: "muted" }, "Semua pungutan dari warga masuk sini. Kalau sudah penuh, uangnya dihamburkan: studi banding, baliho pencitraan, bayar buzzer. Semangat tinggi di akhir ronde juga bisa kena Pengalihan Isu.") : null,
       ada("buzzer") ? h("div", { class: "muted" }, "Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer tetap terlihat seperti warga biasa, tapi menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia, kadang dipalsukan buat memfitnah. Curiga? Panggil Sidang Warga lewat tombol Aksi.") : null,
+    );
+  }
+
+  /** Rezim menyodorkan amplop. Jawabannya rahasia: tidak ada yang diumumkan ke warga lain. */
+  let amplopTerbuka = false;
+  function tawaranSuap(): void {
+    if (amplopTerbuka || disposed) return;
+    amplopTerbuka = true;
+    stopAuto();
+    const jawab = (terima: boolean) => () => {
+      close();
+      void send({ type: "jawab_suap", terima }).then(() => {
+        if (terima) toast("Kamu sekarang buzzer. Siapkan sabotase lewat tombol Aksi.");
+      });
+    };
+    const close = modal(
+      h(
+        "div",
+        { class: "sheet col" },
+        judul("uang", "Tawaran amplop"),
+        h("div", {}, `Utusan Rezim mendekatimu diam-diam: amplop ${dr(SUAP_JUMLAH)}, asal kamu mau jadi buzzer.`),
+        h("div", { class: "muted" }, `Kalau terima: tujuanmu berbalik. Kamu menang kalau Rezim bertahan sampai Pemilu dan kamu tidak diusir Sidang Warga. Tiap ronde kamu bisa menyiapkan satu sabotase, dibayar ${dr(SUAP_GAJI)}.`),
+        h("div", { class: "muted" }, "Kalau tolak: kamu tetap warga, dan Rezim mencari orang lain. Tidak ada yang tahu kamu pernah ditawari."),
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "btn green", style: "flex:1", onclick: jawab(false) }, "Tolak"),
+          h("button", { class: "btn red", style: "flex:1", onclick: jawab(true) }, "Terima"),
+        ),
+      ),
+      () => (amplopTerbuka = false),
+      false,
+    );
+  }
+
+  /** Buzzer memilih satu sabotase untuk akhir ronde ini. */
+  function showSabotase(): void {
+    const lain = playersInOrder(state).filter((p) => p.id !== me && !p.bankrupt);
+    const pilih = (jenis: "tagar" | "tilep" | "lapor" | "citra" | "alibi", target?: string) => () => {
+      close();
+      void send({ type: "sabotase", jenis, ...(target ? { target } : {}) });
+    };
+    const close = sheet(
+      judul("kaca", "Sabotase"),
+      h("div", { class: "muted" }, `Pilih satu. Efeknya muncul di akhir ronde tanpa nama, dan kamu dibayar ${dr(SUAP_GAJI)}. Hati-hati: kadang ada jejak digital yang mengarah ke kamu.`),
+      arow("toa", "Tagar tandingan", `Semangat Demo −${SABOTASE_SEMANGAT}`, "pilih", true, "", pilih("tagar")),
+      arow("karung", "Tilep Lumbung", "Sepertiga isi Lumbung hilang", "pilih", state.lumbung > 0, "Lumbung masih kosong.", pilih("tilep")),
+      arow("naik", "Poles citra Rezim", "Kepercayaan publik naik: Kekuasaan bertambah", "pilih", true, "", pilih("citra")),
+      arow("gembok", "Pura-pura ditangkap", "Kamu ikut ditahan seperti korban, dan satu jejak ke kamu hilang", "alibi", (state.players[me]?.jailTurns ?? 0) === 0, "Kamu memang sedang ditahan.", pilih("alibi")),
+      h("label", {}, "Laporkan warga ke aparat (ditahan)"),
+      ...lain.map((p) =>
+        h(
+          "button",
+          { class: `arow${p.jailTurns > 0 ? " off" : ""}`, onclick: p.jailTurns > 0 ? () => toast("Dia sedang ditahan.") : pilih("lapor", p.id) },
+          ava(p.profession, p.seat),
+          h("span", { class: "a-main" }, h("b", {}, p.name), h("small", {}, `jasa ${p.jasa}`)),
+          h("span", { class: "a-label" }, "laporkan"),
+        ),
+      ),
     );
   }
 
