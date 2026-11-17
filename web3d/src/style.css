@@ -114,7 +114,7 @@ label { font-size: 13px; font-weight: 700; color: var(--teks2); }
 .ktp-photo .ava { width: 84px; height: 96px; border-radius: 10px; border-width: 2px; }
 .ktp-photo .ava svg { width: 96px; height: 96px; margin-left: -6px; }
 .ktp-photo .ava.ganti svg { animation: cap .32s cubic-bezier(.2,1.6,.4,1); }
-.stempel { position: absolute; right: -2px; bottom: 0; transform: rotate(-11deg); border: 2px solid #4a45c8; outline: 1px solid #4a45c8; outline-offset: 2px; color: #4a45c8; border-radius: 6px; padding: 2px 7px; font-size: 10.5px; font-weight: 800; white-space: nowrap; background: rgba(190,227,248,.8); }
+.stempel { position: absolute; right: -2px; bottom: 0; transform: rotate(-11deg); border: 2px solid #4a45c8; outline: 1px solid #4a45c8; outline-offset: 2px; color: #4a45c8; border-radius: 6px; padding: 2px 7px; font-size: 10.5px; font-weight: 800; white-space: nowrap; }
 .ktp-xp { height: 5px; background: #a9d3ee; }
 .ktp-xp i { display: block; height: 100%; background: var(--biru); }
 .profs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; }
