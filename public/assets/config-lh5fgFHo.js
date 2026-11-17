@@ -1,0 +1,1 @@
+var e=`https://negeri-wkwk.vercel.app`,t=()=>!!globalThis.Capacitor?.isNativePlatform?.(),n=`https://smvkbqfffynhtejwvkuj.supabase.co`,r=`sb_publishable_GxiH2VpHQjzFd7HHJ-rDdA_4sCDhh6b`,i=`wss://broker.emqx.io:8084/mqtt,wss://broker.hivemq.com:8884/mqtt,wss://test.mosquitto.org:8081/mqtt`.split(`,`).map(e=>e.trim()).filter(Boolean);export{t as a,e as i,r as n,n as r,i as t};

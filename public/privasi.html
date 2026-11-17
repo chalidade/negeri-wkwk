@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kebijakan Privasi · Negeri Wkwk</title>
+    <meta name="description" content="Kebijakan privasi game Negeri Wkwk: data apa yang dipakai, di mana disimpan, dan siapa yang bisa melihatnya." />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <style>
+      :root { --ink: #1b2440; --kuning: #fcb81c; --kertas: #fffdf7; --teks2: #4d5874; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--kuning); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      main { max-width: 720px; margin: 24px auto; padding: 28px 24px 36px; background: var(--kertas); border: 2px solid var(--ink); border-radius: 20px; }
+      @media (max-width: 760px) { main { margin: 12px; padding: 22px 18px 28px; } }
+      .logo { display: block; width: 220px; max-width: 70%; height: auto; margin: 0 auto 8px; }
+      h1 { font-size: 26px; line-height: 1.2; margin: 8px 0 4px; text-align: center; }
+      .tanggal { text-align: center; color: var(--teks2); margin: 0 0 24px; font-size: 14px; }
+      h2 { font-size: 19px; margin: 28px 0 8px; }
+      p, li { max-width: 68ch; }
+      ul { padding-left: 22px; }
+      table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 15px; }
+      th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid #dfe3ec; }
+      th { background: #eef1f6; }
+      a { color: #2f6fe4; }
+      .ringkas { background: #fff3c9; border: 2px solid var(--ink); border-radius: 14px; padding: 12px 16px; }
+      .ringkas p { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img class="logo" src="/logo.webp" alt="Negeri Wkwk" width="1100" height="547" />
+      <h1>Kebijakan Privasi</h1>
+      <p class="tanggal">Berlaku sejak 17 November 2026. Diperbarui 17 November 2026: main bareng lewat internet kini memakai server penghubung.</p>
+
+      <div class="ringkas">
+        <p>Negeri Wkwk tidak punya akun, tidak memakai iklan, dan tidak melacak pemain. Data permainanmu disimpan di HP-mu sendiri. Saat main bareng teman, nama, pekerjaan, dan jalannya permainan dikirim ke HP pemain lain di room yang sama. Lewat internet, kirimannya dititipkan ke server penghubung dalam keadaan terenkripsi.</p>
+      </div>
+
+      <h2>Siapa kami</h2>
+      <p>Negeri Wkwk adalah game satire fiksi untuk Android dan peramban web, dibuat oleh pengembang perorangan. Kebijakan ini berlaku untuk aplikasi Android Negeri Wkwk dan versi webnya di <a href="https://negeri-wkwk.vercel.app">negeri-wkwk.vercel.app</a>.</p>
+
+      <h2>Data yang disimpan di HP-mu</h2>
+      <p>Data berikut disimpan di penyimpanan lokal aplikasi atau peramban di HP-mu dan tidak dikirim ke server kami. Kami memang tidak punya server yang menyimpan data pemain.</p>
+      <table>
+        <tr><th>Data</th><th>Untuk apa</th></tr>
+        <tr><td>Nama warga dan pekerjaan yang kamu pilih</td><td>Ditampilkan di permainan dan di kartu warga</td></tr>
+        <tr><td>Simpanan permainan, statistik, Emas Antum, pangkat, misi, hiasan dari toko</td><td>Melanjutkan permainan dan mencatat kemajuanmu</td></tr>
+        <tr><td>Pengaturan (suara, musik, kecepatan)</td><td>Mengingat pilihanmu</td></tr>
+        <tr><td>Kode acak pengenal pemain</td><td>Supaya kamu bisa masuk lagi ke room yang sama setelah sambungan putus</td></tr>
+      </table>
+      <p>Semua data ini hilang kalau kamu menghapus data aplikasi, mencopot aplikasi, atau menghapus data situs di peramban. Kami tidak bisa memulihkannya.</p>
+
+      <h2>Saat main bareng teman</h2>
+      <p>HP yang membuat room menjadi tuan rumah: permainan berjalan dan tersimpan di HP itu. HP lain mengirim langkahnya ke tuan rumah dan menerima keadaan permainan darinya.</p>
+      <ul>
+        <li><strong>Yang dikirim ke pemain lain di room:</strong> nama warga, pekerjaan, kode pengenal pemain, dan semua langkah permainan. Tuan rumah menerima semuanya dan menyimpannya di HP-nya.</li>
+        <li><strong>Lewat internet:</strong> HP tidak tersambung langsung satu sama lain. Semua kiriman dititipkan lewat server penghubung (broker MQTT publik milik pihak lain: EMQX, HiveMQ, dan Eclipse Mosquitto). Isinya dienkripsi di HP-mu sebelum dikirim, dengan kunci yang diturunkan dari kode room, jadi pengelola server dan orang di luar room hanya melihat teks acak. Kiriman untuk satu pemain saja dienkripsi lagi dengan kunci yang hanya dimiliki pengirim dan penerimanya.</li>
+        <li><strong>Alamat jaringan:</strong> pengelola server penghubung dapat melihat alamat IP perangkat yang tersambung dan kapan tersambungnya. Pemain lain di room tidak melihat alamat IP-mu.</li>
+        <li><strong>Room publik:</strong> kalau kamu menyalakan "Tampilkan di daftar room", nama warga tuan rumah, babak, dan jumlah pemain diumumkan ke semua orang yang membuka daftar room.</li>
+        <li><strong>Tanpa internet:</strong> sambungan dibuat dengan memindai kode QR di jaringan Wi-Fi atau hotspot yang sama. HP tersambung langsung di jaringan itu (WebRTC), jadi alamat IP lokalnya terlihat oleh tuan rumah. Tidak ada data yang lewat internet.</li>
+      </ul>
+      <p>Pilih nama warga yang tidak membuka identitas aslimu kalau kamu bermain dengan orang yang tidak kamu kenal.</p>
+
+      <h2>Kamera</h2>
+      <p>Izin kamera hanya dipakai untuk memindai kode QR saat main bareng tanpa internet, dan hanya saat kamu membuka pemindai. Gambar kamera diproses di HP-mu untuk membaca kode, lalu dibuang. Tidak ada foto atau video yang disimpan atau dikirim ke mana pun. Kamu bisa menolak izin kamera dan memakai kode yang disalin-tempel sebagai gantinya.</p>
+
+      <h2>Yang tidak kami lakukan</h2>
+      <ul>
+        <li>Tidak ada akun, email, atau nomor telepon yang diminta.</li>
+        <li>Tidak ada iklan, analitik, atau pelacak pihak ketiga.</li>
+        <li>Tidak ada pembelian di dalam aplikasi. Emas Antum hanya didapat dari bermain dan tidak bisa dibeli dengan uang.</li>
+        <li>Tidak ada lokasi, kontak, mikrofon, atau berkas di HP-mu yang diakses.</li>
+        <li>Data tidak dijual atau dibagikan untuk tujuan pemasaran.</li>
+      </ul>
+
+      <h2>Layanan pihak lain</h2>
+      <ul>
+        <li><strong>Hosting versi web:</strong> Vercel. Seperti semua situs, server penyedia hosting mencatat permintaan halaman (alamat IP, waktu, jenis peramban) untuk keperluan teknis dan keamanan.</li>
+        <li><strong>Unduhan dan pembaruan aplikasi:</strong> Google Play, menurut kebijakan privasi Google.</li>
+        <li><strong>Server penghubung (broker MQTT publik EMQX, HiveMQ, Eclipse Mosquitto):</strong> hanya saat main bareng lewat internet, seperti dijelaskan di atas.</li>
+      </ul>
+
+      <h2>Anak-anak</h2>
+      <p>Negeri Wkwk tidak ditujukan untuk anak di bawah 13 tahun dan tidak dengan sengaja mengumpulkan data dari mereka. Karena data disimpan di HP masing-masing, orang tua dapat menghapusnya dengan menghapus data aplikasi.</p>
+
+      <h2>Hak kamu</h2>
+      <p>Karena semua data ada di HP-mu, kamu memegang kendali penuh: lihat dan ubah namamu di beranda, hapus semuanya dengan menghapus data aplikasi atau mencopot aplikasi. Data yang sudah terkirim ke HP tuan rumah ikut terhapus saat tuan rumah menghapus data aplikasinya.</p>
+
+      <h2>Perubahan kebijakan</h2>
+      <p>Kalau cara aplikasi memakai data berubah, misalnya ada fitur online yang memakai server, kebijakan ini akan diperbarui lebih dulu dan tanggal di atas diganti.</p>
+
+      <h2>Kontak</h2>
+      <p>Pertanyaan tentang privasi bisa dikirim lewat halaman <a href="https://github.com/chalidade/negeri-wkwk/issues">Issues proyek Negeri Wkwk di GitHub</a>.</p>
+    </main>
+  </body>
+</html>
