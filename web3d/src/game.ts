@@ -163,8 +163,16 @@ export function startGame(
   const wallet = h("button", { class: "wallet", "aria-label": "Dompetku", onclick: () => state.players[me] && showPlayer(me) }, walletMoney, walletDebt);
   const aksiBtn = h("button", { class: "fab", "aria-label": "Aksi", onclick: () => showAksi() }, ic("petir"), h("small", {}, "Aksi"));
   const fx = h("div", { class: "fx" });
-  const root = h("div", { class: "game" }, top, feed, bottom, fx);
+  // Main bareng: kalau sambungan bermasalah, bilang terus terang selama masalahnya masih ada.
+  const gangguanEl = h("div", { class: "gangguan", style: "display:none" });
+  const root = h("div", { class: "game" }, top, feed, bottom, fx, gangguanEl);
   ui.replaceChildren(root);
+  const cekGangguan = () => {
+    const teks = driver.gangguan?.() ?? null;
+    gangguanEl.style.display = teks ? "" : "none";
+    if (teks && gangguanEl.textContent !== teks) gangguanEl.replaceChildren(ic("sirene"), teks);
+  };
+  const gangguanTimer = driver.gangguan ? setInterval(cekGangguan, 1500) : undefined;
 
   function updateTop(): void {
     const sisa = Math.max(0, state.maxRounds - state.round + 1);
@@ -1947,6 +1955,7 @@ export function startGame(
       scene,
       fx: (id: string) => kebijakanFx(id, state),
       play: (events: GameEvent[]) => play(events, state),
+      versi: () => driver.current().version,
     };
   }
 
@@ -1988,6 +1997,7 @@ export function startGame(
   return () => {
     disposed = true;
     clearTimeout(botTimer);
+    clearInterval(gangguanTimer);
     unsub();
     window.removeEventListener("resize", fit);
     scene.dispose();

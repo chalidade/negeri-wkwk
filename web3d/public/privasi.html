@@ -30,10 +30,10 @@
     <main>
       <img class="logo" src="/logo.webp" alt="Negeri Wkwk" width="1100" height="547" />
       <h1>Kebijakan Privasi</h1>
-      <p class="tanggal">Berlaku sejak 17 November 2026</p>
+      <p class="tanggal">Berlaku sejak 17 November 2026. Diperbarui 17 November 2026: main bareng lewat internet kini memakai server penghubung.</p>
 
       <div class="ringkas">
-        <p>Negeri Wkwk tidak punya akun, tidak memakai iklan, dan tidak melacak pemain. Data permainanmu disimpan di HP-mu sendiri. Saat main bareng teman, nama, pekerjaan, dan jalannya permainan dikirim langsung ke HP pemain lain di room yang sama.</p>
+        <p>Negeri Wkwk tidak punya akun, tidak memakai iklan, dan tidak melacak pemain. Data permainanmu disimpan di HP-mu sendiri. Saat main bareng teman, nama, pekerjaan, dan jalannya permainan dikirim ke HP pemain lain di room yang sama. Lewat internet, kirimannya dititipkan ke server penghubung dalam keadaan terenkripsi.</p>
       </div>
 
       <h2>Siapa kami</h2>
@@ -51,13 +51,13 @@
       <p>Semua data ini hilang kalau kamu menghapus data aplikasi, mencopot aplikasi, atau menghapus data situs di peramban. Kami tidak bisa memulihkannya.</p>
 
       <h2>Saat main bareng teman</h2>
-      <p>HP yang membuat room menjadi tuan rumah: permainan berjalan dan tersimpan di HP itu. HP lain tersambung langsung ke tuan rumah (WebRTC).</p>
+      <p>HP yang membuat room menjadi tuan rumah: permainan berjalan dan tersimpan di HP itu. HP lain mengirim langkahnya ke tuan rumah dan menerima keadaan permainan darinya.</p>
       <ul>
         <li><strong>Yang dikirim ke pemain lain di room:</strong> nama warga, pekerjaan, kode pengenal pemain, dan semua langkah permainan. Tuan rumah menerima semuanya dan menyimpannya di HP-nya.</li>
-        <li><strong>Alamat jaringan:</strong> sambungan langsung antar-HP membuat alamat IP perangkat saling terlihat oleh pemain lain di room yang sama.</li>
-        <li><strong>Mencari teman lewat internet:</strong> untuk saling menemukan, aplikasi memakai relay publik jaringan Nostr. Yang lewat relay hanya kode room dan data teknis untuk membuka sambungan, bukan isi permainan. Relay tersebut dijalankan pihak lain, dan mereka dapat melihat alamat IP yang tersambung.</li>
+        <li><strong>Lewat internet:</strong> HP tidak tersambung langsung satu sama lain. Semua kiriman dititipkan lewat server penghubung (broker MQTT publik milik pihak lain: EMQX, HiveMQ, dan Eclipse Mosquitto). Isinya dienkripsi di HP-mu sebelum dikirim, dengan kunci yang diturunkan dari kode room, jadi pengelola server dan orang di luar room hanya melihat teks acak. Kiriman untuk satu pemain saja dienkripsi lagi dengan kunci yang hanya dimiliki pengirim dan penerimanya.</li>
+        <li><strong>Alamat jaringan:</strong> pengelola server penghubung dapat melihat alamat IP perangkat yang tersambung dan kapan tersambungnya. Pemain lain di room tidak melihat alamat IP-mu.</li>
         <li><strong>Room publik:</strong> kalau kamu menyalakan "Tampilkan di daftar room", nama warga tuan rumah, babak, dan jumlah pemain diumumkan ke semua orang yang membuka daftar room.</li>
-        <li><strong>Tanpa internet:</strong> sambungan dibuat dengan memindai kode QR di jaringan Wi-Fi atau hotspot yang sama. Tidak ada data yang lewat internet.</li>
+        <li><strong>Tanpa internet:</strong> sambungan dibuat dengan memindai kode QR di jaringan Wi-Fi atau hotspot yang sama. HP tersambung langsung di jaringan itu (WebRTC), jadi alamat IP lokalnya terlihat oleh tuan rumah. Tidak ada data yang lewat internet.</li>
       </ul>
       <p>Pilih nama warga yang tidak membuka identitas aslimu kalau kamu bermain dengan orang yang tidak kamu kenal.</p>
 
@@ -77,7 +77,7 @@
       <ul>
         <li><strong>Hosting versi web:</strong> Vercel. Seperti semua situs, server penyedia hosting mencatat permintaan halaman (alamat IP, waktu, jenis peramban) untuk keperluan teknis dan keamanan.</li>
         <li><strong>Unduhan dan pembaruan aplikasi:</strong> Google Play, menurut kebijakan privasi Google.</li>
-        <li><strong>Relay Nostr publik:</strong> hanya saat main bareng lewat internet, seperti dijelaskan di atas.</li>
+        <li><strong>Server penghubung (broker MQTT publik EMQX, HiveMQ, Eclipse Mosquitto):</strong> hanya saat main bareng lewat internet, seperti dijelaskan di atas.</li>
       </ul>
 
       <h2>Anak-anak</h2>

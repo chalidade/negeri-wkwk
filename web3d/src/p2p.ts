@@ -257,7 +257,7 @@ export function bukaTuan(
       return;
     }
     if (iklan) return;
-    iklan = await saluranInternet("lobi-publik");
+    iklan = await saluranInternet("lobi-publik", { siaran: true });
     const umumkan = (ke?: string) =>
       iklan?.kirim(
         {
@@ -270,7 +270,8 @@ export function bukaTuan(
         },
         ke,
       );
-    iklan.onMasuk((r) => umumkan(r));
+    // tersiar tiap 4 detik, dan langsung begitu tersambung ke server penghubung
+    iklan.onSambungan?.(() => umumkan());
     iklanTimer = setInterval(() => umumkan(), 4000);
     umumkan();
   };
@@ -296,6 +297,7 @@ export function bukaTuan(
         return () => subs.delete(cb);
       },
       role: () => "rakyat",
+      gangguan: () => (saluran.terhubung?.() === false ? "Sambungan putus. Teman belum bisa mengikuti, menyambung ulang…" : null),
       forget: () => {
         localStorage.removeItem(TUAN_KEY);
       },
@@ -409,6 +411,12 @@ export function bukaTamu(saluran: Saluran, opsi: { nama: string; profesi: Profes
       return () => subs.delete(cb);
     },
     role: () => "rakyat",
+    gangguan: () =>
+      saluran.terhubung?.() === false
+        ? "Sambungan putus. Menyambung ulang…"
+        : tuan
+          ? null
+          : "Tuan rumah tidak terjangkau. Menunggu dia tersambung lagi…",
     forget: () => localStorage.removeItem(TAMU_KEY),
   };
 
@@ -478,7 +486,7 @@ export interface Iklan {
 
 /** Pantau room publik yang sedang menunggu pemain. Mengembalikan fungsi untuk berhenti. */
 export async function pantauRoom(cb: (daftar: Iklan[]) => void): Promise<() => void> {
-  const sal = await saluranInternet("lobi-publik");
+  const sal = await saluranInternet("lobi-publik", { siaran: true });
   const daftar = new Map<string, Iklan>();
   const lapor = () => {
     const kini = Date.now();

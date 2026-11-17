@@ -219,6 +219,26 @@ function lobiTuan(tuan: Tuan, saluran: Saluran | TuanLokal): void {
   const tambahBot = h("button", { class: "btn grey", style: "flex:1", onclick: () => tuan.tambahBot() }, ic("robot"), "Tambah bot");
   const publikBtn = h("button", { class: "saklar", onclick: () => tuan.setPublik(!tuan.info().publik) });
   let berjalan = false;
+  // Server penghubung: tanpa ini teman tidak bisa masuk, jadi keadaannya ditunjukkan terang-terangan.
+  const relay = h("div", { class: "muted small" });
+  let relayLama = false;
+  const lukisRelay = () => {
+    const sv = saluran.server?.();
+    relay.style.display = sv ? "" : "none";
+    if (!sv) return;
+    relay.textContent =
+      sv.hidup > 0
+        ? `Server penghubung tersambung (${sv.hidup} dari ${sv.total}).`
+        : relayLama
+          ? "Belum bisa menyambung ke server penghubung. Cek internetmu, teman belum bisa masuk."
+          : "Menyambung ke server penghubung…";
+  };
+  saluran.onSambungan?.(lukisRelay);
+  const relayTimer = setTimeout(() => {
+    relayLama = true;
+    lukisRelay();
+  }, 10_000);
+  lukisRelay();
 
   const lukis = () => {
     const i = tuan.info();
@@ -280,6 +300,7 @@ function lobiTuan(tuan: Tuan, saluran: Saluran | TuanLokal): void {
               { class: "panel col center" },
               h("label", {}, "Kode room"),
               h("div", { class: "code" }, info.kode),
+              relay,
               h("button", { class: "btn blue block", onclick: () => void bagikan(info.kode) }, ic("salin"), "Bagikan link ke teman"),
               h("div", { class: "baris-saklar" }, h("span", {}, h("b", {}, "Tampilkan di daftar room"), h("small", {}, "Orang lain bisa ikut tanpa kode")), publikBtn),
             ),
@@ -293,6 +314,7 @@ function lobiTuan(tuan: Tuan, saluran: Saluran | TuanLokal): void {
   );
   lukis();
   K.setCleanup(() => {
+    clearTimeout(relayTimer);
     if (!berjalan) tuan.bubar();
   });
 }
@@ -303,27 +325,39 @@ async function gabungInternet(kode: string): Promise<void> {
   sfx.click();
   try {
     const saluran = await saluranInternet(`room-${kode}`);
-    lobiTamu(bukaTamu(saluran, { nama: K.nama, profesi: K.profesi, kode, jenis: "internet" }), kode);
+    lobiTamu(bukaTamu(saluran, { nama: K.nama, profesi: K.profesi, kode, jenis: "internet" }), kode, saluran);
   } catch (e) {
     toast(pesanGalat(e));
   }
 }
 
-function lobiTamu(tamu: Tamu, kode: string): void {
+function lobiTamu(tamu: Tamu, kode: string, saluran?: Saluran): void {
   const status = h("div", { class: "muted" });
+  const relayInfo = h("div", { class: "muted small" });
   const list = h("div", { class: "col", style: "gap:7px" });
   let berjalan = false;
-  // Tidak ketemu tuan rumah dalam beberapa detik: kasih tahu, tapi tetap menunggu.
+  let lama = false;
+  // Tidak ketemu tuan rumah dalam beberapa detik: kasih tahu penyebabnya, tapi tetap menunggu.
   const telat = setTimeout(() => {
-    if (!tamu.tersambung()) status.textContent = "Belum ketemu tuan rumah. Cek kodenya, dan pastikan HP tuan rumah masih membuka game.";
-  }, 9000);
+    lama = true;
+    lukis();
+  }, 10_000);
   const lukis = () => {
     const i = tamu.info();
-    status.textContent = !tamu.tersambung()
-      ? i
-        ? "Sambungan ke tuan rumah putus. Menyambung ulang…"
-        : "Menghubungi tuan rumah…"
-      : i?.mulai
+    const relayOk = saluran?.terhubung?.() ?? true;
+    const sv = saluran?.server?.();
+    relayInfo.textContent = sv && sv.hidup > 0 ? `Server penghubung tersambung (${sv.hidup} dari ${sv.total}).` : "";
+    status.textContent = !relayOk
+      ? lama
+        ? "Belum bisa menyambung ke server penghubung. Cek internetmu."
+        : "Menyambung ke server penghubung…"
+      : !tamu.tersambung()
+        ? i
+          ? "Sambungan ke tuan rumah putus. Menyambung ulang…"
+          : lama
+            ? "Belum ketemu tuan rumah. Cek kodenya, dan pastikan HP tuan rumah masih membuka game."
+            : "Mencari tuan rumah…"
+        : i?.mulai
         ? "Permainan sudah berjalan. Memuat…"
         : "Tersambung. Menunggu tuan rumah memulai.";
     list.replaceChildren(
@@ -338,6 +372,7 @@ function lobiTamu(tamu: Tamu, kode: string): void {
     );
   };
   tamu.onUbah(lukis);
+  saluran?.onSambungan?.(lukis);
   tamu.onTolak((alasan) => {
     toast(alasan);
     berjalan = true;
@@ -365,7 +400,7 @@ function lobiTamu(tamu: Tamu, kode: string): void {
           tamu.keluar();
           layarBareng(K);
         }), h("div", { class: "h1" }, "Ruang tunggu")),
-        h("div", { class: "panel col center" }, h("label", {}, "Room"), h("div", { class: "code" }, kode), status),
+        h("div", { class: "panel col center" }, h("label", {}, "Room"), h("div", { class: "code" }, kode), status, relayInfo),
         list,
       ),
     ),

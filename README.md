@@ -82,11 +82,15 @@ Arah desain "stopmap & stempel": warna datar, garis tinta, bayangan keras, tanpa
 Bawaannya (`BACKEND = "p2p"` di `web3d/src/config.ts`) game tidak memakai Supabase sama sekali:
 
 - **Tuan rumah** (`web3d/src/p2p.ts`): HP yang bikin room menjalankan engine dan menyimpan permainan di localStorage-nya. Tamu mengirim aksi, tuan rumah membalas state. Rahasia (siapa buzzer, tawaran amplop) disaring per tamu. Tamu yang terputus lebih dari 25 detik saat gilirannya dimainkan AI sampai dia kembali.
-- **Lewat internet** (`web3d/src/net.ts`): WebRTC langsung antar-HP. HP saling menemukan lewat relay publik Nostr (pustaka trystero) memakai kode room 6 huruf atau link `?gabung=KODE`. Room publik mengumumkan diri di ruang `lobi-publik` sehingga muncul di daftar "Room terbuka".
+- **Lewat internet** (`web3d/src/net.ts`, `web3d/src/mqtt.ts`): pesan dititipkan lewat server penghubung, yaitu broker MQTT lewat WebSocket aman (`RELAY_URLS` di `config.ts`). Tidak ada sambungan langsung antar-HP, jadi HP di jaringan berbeda (data seluler, Wi-Fi kantor) tetap bisa main bareng tanpa harus menembus NAT. Semua broker dipakai sekaligus dan kiriman ganda dibuang, jadi satu broker mati tidak terasa. Kode room 6 huruf atau link `?gabung=KODE` menentukan topik dan kunci ruang. Room publik menyiarkan diri di ruang `lobi-publik` sehingga muncul di daftar "Room terbuka".
+  - Isi pesan dienkripsi di HP (AES-GCM, kunci dari kode room). Pesan untuk satu pemain, misalnya state yang menyembunyikan peran, memakai kunci pasangan hasil ECDH, jadi anggota room lain pun tidak bisa membacanya.
+  - Kehadiran rekan dipantau lewat detak tiap 4 detik; 15 detik tanpa kabar dianggap pergi. Putus dari semua broker lalu tersambung lagi memicu perkenalan ulang dan tuan rumah mengirim state terbaru.
+  - Tiga broker bawaan adalah broker publik untuk uji coba (EMQX, HiveMQ, Mosquitto), tanpa jaminan layanan. Sebelum rilis luas, pakai broker sendiri: build dengan `VITE_RELAY=wss://...` (boleh beberapa, dipisah koma).
+  - Sebelumnya jalur ini memakai WebRTC langsung (pustaka trystero) tanpa server TURN, sehingga gagal tersambung antar jaringan seluler yang memakai NAT ketat.
 - **Tanpa internet**: semua HP di Wi-Fi atau hotspot yang sama. Tuan rumah menampilkan QR undangan, tamu memindainya dan menampilkan QR jawaban, tuan rumah memindai balik. Service worker (`web3d/public/sw.js`) menyimpan aset supaya game tetap bisa dibuka tanpa internet.
 - **Bluetooth dan Wi-Fi Direct** tidak bisa dari peramban; butuh aplikasi Android (Capacitor + Nearby Connections). Belum dikerjakan.
 - **Jalur Supabase** tetap ada: build dengan `VITE_BACKEND=supabase` untuk mengaktifkannya. Kodenya ada di `web3d/src/online-supabase.ts` dan baru dimuat kalau diaktifkan. Migration dan Edge Functions di `supabase/` tidak diubah.
-- Pengujian di satu peramban: tambahkan `?uji` di URL supaya beberapa tab saling tersambung lewat BroadcastChannel tanpa relay.
+- Pengujian di satu peramban: tambahkan `?uji` di URL supaya beberapa tab saling tersambung lewat BroadcastChannel tanpa server penghubung.
 
 ## Aplikasi Android
 

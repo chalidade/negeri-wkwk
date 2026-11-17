@@ -28,6 +28,8 @@ export interface Driver {
   role(): Role;
   /** Buang simpanan saat permainan selesai atau ditinggalkan. */
   forget(): void;
+  /** Main bareng: keterangan kalau sambungan sedang bermasalah, atau null kalau lancar. */
+  gangguan?(): string | null;
 }
 
 // ------------------------------------------------------------------ solo
