@@ -151,7 +151,8 @@ export function declareBankrupt(ctx: Ctx, id: string): void {
   emit(ctx, { type: "bangkrut", actor: id, payload: {} });
   if (isOver(s)) return;
 
-  const bangkrut = s.order.filter((pid) => s.players[pid].bankrupt).length;
+  // Buzzer yang sudah diusir tidak dihitung sebagai warga yang tumbang.
+  const bangkrut = s.order.filter((pid) => s.players[pid].bankrupt && !s.players[pid].buzzer).length;
   const alive = alivePlayers(s);
   if (coop(s)) {
     addSemangat(ctx, -R.PENALTI_BANGKRUT_SEMANGAT, "warga_bangkrut");

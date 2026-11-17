@@ -87,12 +87,23 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
   if (s.phase === "awaiting_buy") {
     const idx = s.pendingTile ?? -1;
     // Buzzer selalu main pelicin (itu menyuburkan Rezim). Warga jujur baru nyogok kalau kepepet.
-    if (buzzer && p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) return { type: "buy", jalur: "pelicin" };
+    // Buzzer sesekali main pelicin (itu menyuburkan Rezim), tapi tidak selalu, supaya tidak kentara.
+    if (buzzer && (s.round + p.seat) % 3 === 0 && p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) {
+      return { type: "buy", jalur: "pelicin" };
+    }
     if (p.cuan - hargaBeli(s, idx) >= reserve) return { type: "buy" };
     if (p.cuan - hargaBeli(s, idx, "pelicin") >= reserve) return { type: "buy", jalur: "pelicin" };
     return { type: "skip_buy" };
   }
   if (s.phase !== "awaiting_roll" && s.phase !== "awaiting_end") return { type: "end_turn" };
+
+  // Sidang Warga: warga jujur memanggil kalau jejak ke satu orang sudah menumpuk.
+  // Buzzer juga bisa memanggil, untuk menjebak warga yang kebetulan kena jejak palsu.
+  if (coop(s) && !p.sudahSidang && s.round >= 5 && s.phase === "awaiting_roll") {
+    const lain = s.order.map((id) => s.players[id]).filter((x) => x.id !== botId && !x.bankrupt);
+    const puncak = Math.max(0, ...lain.map((x) => s.jejak[x.id] ?? 0));
+    if (lain.length >= 2 && puncak >= (buzzer ? 2 : 3)) return { type: "sidang" };
+  }
 
   // Buzzer menyiapkan satu sabotase tiap ronde.
   if (buzzer && s.rahasia.buzzer === botId && s.rahasia.antre === 0 && s.phase === "awaiting_roll") {
@@ -137,7 +148,7 @@ export function decideBotAction(s: GameState, botId: string, role: PlayerSecret[
   if (p.cuan < 600_000 && p.utang === 0) return { type: "pinjol", amount: 2_000_000 };
 
   // 5. Gotong royong: yang longgar membantu warga yang terlilit utang.
-  if (kawan && !s.sudahBantu && p.cuan >= reserve * 4) {
+  if ((kawan || purapura) && !s.sudahBantu && p.cuan >= reserve * 4) {
     const susah = s.order.map((id) => s.players[id]).find((x) => x.id !== botId && !x.bankrupt && x.utang >= 1_000_000);
     if (susah) return { type: "bantu", target: susah.id, amount: 1_000_000 };
   }

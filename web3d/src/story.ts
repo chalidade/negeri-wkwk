@@ -107,10 +107,14 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
       return "🕵️ Ada buzzer beraksi!";
     case "jejak":
       return `🔎 Jejak digital mengarah ke ${name(p.ke)}`;
+    case "sidang_dibuka":
+      return `📣 ${who} memanggil Sidang Warga`;
+    case "hasil_sidang":
+      return p.keluar ? `🗳️ Sidang memutuskan: ${name(p.keluar)} diusir` : "🗳️ Sidang bubar tanpa keputusan";
     case "buzzer_terbongkar":
-      return `🕵️ ${name(p.target)} terbongkar sebagai buzzer!`;
-    case "tuduh_salah":
-      return `🙊 ${who} salah menuduh ${name(p.target)}`;
+      return `🕵️ ${name(p.target)} ternyata buzzer! Hartanya balik ke warga`;
+    case "salah_usir":
+      return `😱 ${name(p.target)} ternyata warga biasa. Hartanya disita Rezim`;
     case "ronde_baru":
       return `🗓️ Ronde ${p.ronde}. Pemilu ${p.sisa} ronde lagi.`;
     default:
@@ -123,6 +127,9 @@ export function resultTitle(s: GameState, me: string): { title: string; sub: str
   if (!r) return { title: "Selesai", sub: "", win: false };
   if (r.kind === "rakyat_menang") {
     return { title: "REZIM TUMBANG!", sub: `Rakyat menang di ronde ${s.round} lewat ${s.demoCount} Demo Akbar.`, win: true };
+  }
+  if (r.kind === "rakyat_kalah" && s.players[me]?.diusir) {
+    return { title: "Kamu Diusir Warga", sub: "Jejak palsu berhasil memfitnahmu, dan Rezim menyita hartamu.", win: false };
   }
   if (r.kind === "rakyat_kalah") {
     return r.reason === "pemilu"

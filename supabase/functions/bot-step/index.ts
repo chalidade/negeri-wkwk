@@ -24,6 +24,7 @@ Deno.serve(handler(async ({ admin, userId, body }) => {
     throw new HttpError(409, "state_basi", "State sudah berubah, muat ulang dulu.");
   }
   if (row.state.phase === "game_over") throw new HttpError(409, "game_selesai", "Permainan sudah selesai.");
+  if (row.state.phase === "voting") throw new HttpError(409, "bukan_giliran_bot", "Sidang Warga sedang berlangsung.");
   const botId = row.state.order[row.state.turn];
   if (!row.state.players[botId]?.bot) throw new HttpError(409, "bukan_giliran_bot", "Sekarang bukan giliran bot.");
 

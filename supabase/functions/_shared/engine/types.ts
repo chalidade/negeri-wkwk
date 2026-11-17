@@ -57,8 +57,10 @@ export interface PlayerState {
   jurus: number;
   /** poin jasa melawan Rezim, penentu MVP */
   jasa: number;
-  /** sudah memakai satu-satunya kesempatan menuduh buzzer */
-  sudahTuduh?: boolean;
+  /** sudah memakai satu-satunya kesempatan memanggil Sidang Warga */
+  sudahSidang?: boolean;
+  /** diusir lewat Sidang Warga (keluar dari permainan) */
+  diusir?: boolean;
   /** buzzer yang sudah terbongkar (diketahui semua orang) */
   buzzer?: boolean;
   /** true kalau pemain ini dijalankan komputer */
@@ -72,7 +74,16 @@ export interface TileState {
   level: number;
 }
 
-export type Phase = "awaiting_roll" | "awaiting_buy" | "awaiting_end" | "game_over";
+export type Phase = "awaiting_roll" | "awaiting_buy" | "awaiting_end" | "voting" | "game_over";
+
+/** Sidang Warga yang sedang berlangsung: semua warga memilih siapa yang diusir. */
+export interface Sidang {
+  pemanggil: string;
+  /** id pemilih -> id yang dipilih ("" = abstain). Dibuka ke semua orang saat sidang selesai. */
+  suara: Record<string, string>;
+  /** fase yang dilanjutkan setelah sidang selesai */
+  kembali: Phase;
+}
 
 export type GameResult =
   | { kind: "rakyat_menang" }
@@ -120,6 +131,7 @@ export interface GameState {
   /** grup warna yang sudah pernah jadi Kampung Mandiri */
   kampung: string[];
   phase: Phase;
+  sidang: Sidang | null;
   pendingTile: number | null;
   lastDice: [number, number] | null;
   doublesInRow: number;
@@ -146,7 +158,8 @@ export type Action =
   | { type: "bantu"; target: string; amount: number }
   | { type: "jurus" }
   | { type: "sabotase" }
-  | { type: "tuduh"; target: string }
+  | { type: "sidang" }
+  | { type: "vote"; target: string | null }
   | { type: "buy"; jalur?: Jalur }
   | { type: "skip_buy" }
   | { type: "upgrade"; tile: number; jalur?: Jalur }

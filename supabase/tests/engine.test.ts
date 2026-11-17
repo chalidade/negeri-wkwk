@@ -366,20 +366,62 @@ describe("Dadu Nasib & buzzer", () => {
     assert.ok(!types(r).includes("sabotase"));
   });
 
-  it("menuduh: benar membongkar buzzer, salah kena denda, cuma satu kesempatan", () => {
-    const s = denganBuzzer();
-    const benar = act(s, "andi", { type: "tuduh", target: "budi" });
-    assert.equal(benar.state.players.budi.buzzer, true);
-    assert.equal(benar.state.kekuasaan, s.kekuasaanMaks - R.BONGKAR_DAMAGE);
-    assert.equal(benar.state.semangat, R.BONGKAR_SEMANGAT);
-    assert.throws(() => act(benar.state, "andi", { type: "tuduh", target: "citra" }), (e: GameError) => e.code === "sudah_tuduh");
+  function sidangSolo(buzzer: string | null, jejak: Record<string, number>): GameState {
+    const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession, bot: i > 0 }));
+    const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 1, buzzer);
+    s.jejak = jejak;
+    s.tiles[4] = { owner: "budi", level: 2 };
+    s.tiles[5] = { owner: "citra", level: 1 };
+    return s;
+  }
 
-    s.semangat = 30;
-    const salah = act(s, "andi", { type: "tuduh", target: "citra" });
-    assert.ok(types(salah).includes("tuduh_salah"));
-    assert.equal(salah.state.players.andi.cuan, 20 * JT - R.FITNAH_DENDA);
-    assert.equal(salah.state.semangat, 30 - R.FITNAH_SEMANGAT);
-    assert.deepEqual(salah.state.bersih, ["citra"]);
+  it("Sidang Warga: bot langsung memilih, menunggu suara manusia, buzzer yang diusir hartanya balik ke warga", () => {
+    const s = sidangSolo("budi", { budi: 3 });
+    const buka = act(s, "andi", { type: "sidang" });
+    assert.equal(buka.state.phase, "voting");
+    assert.deepEqual(Object.keys(buka.state.sidang!.suara).sort(), ["budi", "citra", "dewi"]);
+    assert.throws(() => act(buka.state, "andi", { type: "roll" }), (e: GameError) => e.code === "fase_salah");
+    const r = act(buka.state, "andi", { type: "vote", target: "budi" });
+    assert.equal(r.state.sidang, null);
+    assert.equal(r.state.phase, "awaiting_roll");
+    assert.equal(r.state.players.budi.diusir, true);
+    assert.equal(r.state.players.budi.buzzer, true);
+    assert.equal(r.state.kekuasaan, s.kekuasaanMaks - R.BONGKAR_DAMAGE);
+    assert.equal(r.state.lumbung, 20 * JT);
+    assert.notEqual(r.state.tiles[4].owner, "budi");
+    assert.equal(r.state.tiles[4].level, 2);
+    assert.throws(() => act(r.state, "andi", { type: "sidang" }), (e: GameError) => e.code === "sudah_sidang");
+  });
+
+  it("Sidang Warga: mengusir warga tak bersalah, hartanya disita Rezim", () => {
+    const s = sidangSolo(null, { citra: 4 });
+    s.semangat = 40;
+    const r = act(act(s, "andi", { type: "sidang" }).state, "andi", { type: "vote", target: "citra" });
+    assert.ok(types(r).includes("salah_usir"));
+    assert.equal(r.state.players.citra.diusir, true);
+    assert.equal(r.state.tiles[5].owner, GOV);
+    assert.equal(r.state.semangat, 40 - R.FITNAH_SEMANGAT);
+    assert.equal(r.state.phase, "awaiting_roll");
+  });
+
+  it("Sidang Warga: tanpa petunjuk bot abstain, tidak ada yang diusir", () => {
+    const s = sidangSolo(null, {});
+    const r = act(act(s, "andi", { type: "sidang" }).state, "andi", { type: "vote", target: "budi" });
+    assert.deepEqual(r.events.find((e) => e.type === "hasil_sidang")!.payload.keluar, null);
+    assert.equal(r.state.players.budi.bankrupt, false);
+  });
+
+  it("beberapa manusia: semua harus memilih, boleh di luar giliran, tidak boleh dua kali", () => {
+    const s = setup();
+    s.jejak = { dewi: 1 };
+    let t = act(s, "andi", { type: "sidang" }).state;
+    t = act(t, "citra", { type: "vote", target: "dewi" }).state;
+    assert.throws(() => act(t, "citra", { type: "vote", target: null }), (e: GameError) => e.code === "sudah_memilih");
+    t = act(t, "budi", { type: "vote", target: "dewi" }).state;
+    t = act(t, "dewi", { type: "vote", target: null }).state;
+    assert.equal(t.phase, "voting");
+    t = act(t, "andi", { type: "vote", target: "dewi" }).state;
+    assert.equal(t.players.dewi.diusir, true);
   });
 });
 
@@ -465,6 +507,18 @@ describe("simulasi", () => {
       }));
       let s = createInitialState(`room-${g}`, mode, members, rng, 1 + (g % 10), g % 2 ? `p${g % n}` : null, g % 4 === 0);
       for (let step = 0; step < 4000 && s.phase !== "game_over"; step++) {
+        if (s.phase === "voting") {
+          // sidang berlangsung: warga yang belum memilih memberi suara acak
+          const pemilih = s.order.find((id) => !s.players[id].bankrupt && s.sidang!.suara[id] === undefined)!;
+          const pilih = rng.int(0, n);
+          try {
+            s = applyAction(s, pemilih, { type: "vote", target: pilih === n ? null : `p${pilih}` }, rng).state;
+          } catch (e) {
+            if (!(e instanceof GameError)) throw e;
+            s = applyAction(s, pemilih, { type: "vote", target: null }, rng).state;
+          }
+          continue;
+        }
         const me = s.order[s.turn];
         const options: Action[] = [];
         if (s.phase === "awaiting_roll") {
@@ -476,7 +530,7 @@ describe("simulasi", () => {
           if (rng.int(0, 9) === 0) options.push({ type: "petisi" }, { type: "liputan_media" });
           if (rng.int(0, 9) === 0) options.push({ type: "donasi_lumbung", amount: 500_000 });
           if (rng.int(0, 5) === 0) options.push({ type: "jurus" });
-          if (rng.int(0, 7) === 0) options.push({ type: "sabotase" }, { type: "tuduh", target: `p${rng.int(0, n - 1)}` });
+          if (rng.int(0, 7) === 0) options.push({ type: "sabotase" }, { type: "sidang" });
           if (rng.int(0, 9) === 0) {
             options.push({ type: "pinjol", amount: 1_500_000 }, { type: "bayar_utang", amount: 1_000_000 });
             options.push({ type: "bantu", target: `p${rng.int(0, n - 1)}`, amount: 500_000 });
@@ -505,7 +559,7 @@ describe("simulasi", () => {
         assert.ok(s.semangat >= 0 && s.semangat < R.SEMANGAT_PENUH);
         assert.ok(s.kekuasaan >= 0 && s.kekuasaan <= s.kekuasaanMaks);
         assert.ok(s.lumbung >= 0);
-        if (s.phase !== "game_over") assert.equal(s.players[s.order[s.turn]].bankrupt, false);
+        if (s.phase !== "game_over" && s.phase !== "voting") assert.equal(s.players[s.order[s.turn]].bankrupt, false);
       }
       assert.equal(s.phase, "game_over", `game ${g} tidak selesai`);
     }

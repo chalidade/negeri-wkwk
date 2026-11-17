@@ -119,6 +119,7 @@ export function createInitialState(
       rekrut: mode === "rakyat_bersatu" && rekrut && !buzzer,
     },
     phase: "awaiting_roll",
+    sidang: null,
     pendingTile: null,
     lastDice: null,
     doublesInRow: 0,
@@ -161,7 +162,8 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
   const actor = s.players[actorId];
   if (!actor) throw new GameError("bukan_pemain", "Kamu bukan pemain di room ini.");
   if (actor.bankrupt) throw new GameError("bangkrut", "Kamu sudah bangkrut.");
-  if (s.order[s.turn] !== actorId) throw new GameError("bukan_giliran", "Belum giliranmu.");
+  // Memilih di Sidang Warga boleh kapan saja, tidak harus sedang giliran.
+  if (action.type !== "vote" && s.order[s.turn] !== actorId) throw new GameError("bukan_giliran", "Belum giliranmu.");
 
   switch (action.type) {
     case "roll":
@@ -190,9 +192,13 @@ export function applyAction(state: GameState, actorId: string, action: Action, r
       if (s.rahasia.antre > 0) throw new GameError("sabotase_antre", "Sabotase ronde ini sudah disiapkan.");
       s.rahasia.antre = 1; // efeknya baru muncul di akhir ronde, tanpa nama pelaku
       break;
-    case "tuduh":
+    case "sidang":
       requirePhase(s, "awaiting_roll", "awaiting_end");
-      doTuduh(ctx, actor, action.target);
+      doSidang(ctx, actor);
+      break;
+    case "vote":
+      requirePhase(s, "voting");
+      doVote(ctx, actor, action.target);
       break;
     case "buy":
       requirePhase(s, "awaiting_buy");
@@ -784,27 +790,115 @@ function rekrutBuzzer(ctx: Ctx): void {
   s.rahasia.rekrut = false;
 }
 
-/** Menuduh seorang warga sebagai buzzer. Tiap pemain hanya punya satu kesempatan. */
-function doTuduh(ctx: Ctx, p: PlayerState, targetId: string): void {
+/**
+ * Sidang Warga ala "siapa pengkhianatnya": siapa pun boleh memanggil (sekali per permainan),
+ * semua warga memilih, dan yang suaranya terbanyak diusir dari permainan.
+ */
+function doSidang(ctx: Ctx, p: PlayerState): void {
   const s = ctx.s;
-  if (!coop(s)) throw new GameError("mode_salah", "Buzzer hanya ada di mode Rakyat Bersatu.");
-  if (p.sudahTuduh) throw new GameError("sudah_tuduh", "Kesempatan menuduhmu sudah terpakai.");
-  const target = s.players[targetId];
-  if (!target || target.id === p.id || target.bankrupt || target.buzzer) {
-    throw new GameError("target_tidak_valid", "Warga itu tidak bisa dituduh.");
+  if (!coop(s)) throw new GameError("mode_salah", "Sidang Warga hanya ada di mode Rakyat Bersatu.");
+  if (p.sudahSidang) throw new GameError("sudah_sidang", "Kamu sudah pernah memanggil Sidang Warga.");
+  const hidup = alivePlayers(s);
+  if (hidup.length < 3) throw new GameError("warga_kurang", "Sidang butuh minimal 3 warga.");
+  p.sudahSidang = true;
+  s.sidang = { pemanggil: p.id, suara: {}, kembali: s.phase };
+  s.phase = "voting";
+  emit(ctx, { type: "sidang_dibuka", actor: p.id, payload: {} });
+  for (const v of hidup) if (v.bot) s.sidang.suara[v.id] = suaraBot(ctx, v);
+  tutupSidangKalauLengkap(ctx);
+}
+
+/** Suara bot: makin banyak jejak makin dicurigai, ditambah firasat acak. Ragu-ragu berarti abstain. */
+function suaraBot(ctx: Ctx, v: PlayerState): string {
+  const s = ctx.s;
+  const calon = alivePlayers(s).filter((c) => c.id !== v.id);
+  const jasaMaks = Math.max(...calon.map((c) => c.jasa));
+  const akuBuzzer = s.rahasia.buzzer === v.id;
+  let pilih = "";
+  let tertinggi = 3; // di bawah ambang ini: abstain
+  for (const c of calon) {
+    let skor = (s.jejak[c.id] ?? 0) * 2 + ctx.rng.int(0, 20) / 10;
+    if (c.jasa === jasaMaks && c.jasa > 0) skor -= 1; // yang paling berjasa lebih dipercaya
+    if (akuBuzzer) skor += 1; // buzzer ikut mengompori supaya warga tak bersalah yang kena
+    if (skor >= tertinggi) {
+      pilih = c.id;
+      tertinggi = skor;
+    }
   }
-  p.sudahTuduh = true;
-  if (s.rahasia.buzzer === target.id) {
-    target.buzzer = true;
+  return pilih;
+}
+
+function doVote(ctx: Ctx, p: PlayerState, target: string | null): void {
+  const s = ctx.s;
+  const sidang = s.sidang;
+  if (!sidang) throw new GameError("fase_salah", "Tidak ada sidang yang berlangsung.");
+  if (sidang.suara[p.id] !== undefined) throw new GameError("sudah_memilih", "Suaramu sudah masuk.");
+  const t = target ? s.players[target] : null;
+  if (target && (!t || t.bankrupt || t.id === p.id)) throw new GameError("target_tidak_valid", "Warga itu tidak bisa dipilih.");
+  sidang.suara[p.id] = target ?? "";
+  emit(ctx, { type: "suara_masuk", actor: p.id, payload: {} });
+  tutupSidangKalauLengkap(ctx);
+}
+
+function tutupSidangKalauLengkap(ctx: Ctx): void {
+  const s = ctx.s;
+  const sidang = s.sidang!;
+  const hidup = alivePlayers(s);
+  if (hidup.some((v) => sidang.suara[v.id] === undefined)) return;
+
+  const hitung: Record<string, number> = {};
+  let abstain = 0;
+  for (const v of hidup) {
+    const t = sidang.suara[v.id];
+    if (t) hitung[t] = (hitung[t] ?? 0) + 1;
+    else abstain += 1;
+  }
+  const urut = Object.entries(hitung).sort((x, y) => y[1] - x[1]);
+  // Diusir hanya kalau suaranya terbanyak, tidak seri, dan lebih banyak dari yang abstain.
+  const keluar =
+    urut.length > 0 && urut[0][1] > abstain && (urut.length === 1 || urut[0][1] > urut[1][1]) ? urut[0][0] : null;
+  emit(ctx, { type: "hasil_sidang", payload: { suara: { ...sidang.suara }, keluar } });
+  s.phase = sidang.kembali;
+  s.sidang = null;
+  ctx.oleh = sidang.pemanggil;
+  if (keluar) usir(ctx, keluar);
+}
+
+/** Warga terpilih keluar dari permainan. Buzzer: hartanya balik ke warga. Bukan buzzer: disita Rezim. */
+function usir(ctx: Ctx, id: string): void {
+  const s = ctx.s;
+  const p = s.players[id];
+  const buzzer = s.rahasia.buzzer === id;
+  p.bankrupt = true;
+  p.diusir = true;
+  p.jailTurns = 0;
+  const hidup = alivePlayers(s);
+  const milik = s.tiles.map((t, i) => ({ t, i })).filter((x) => x.t.owner === id);
+
+  if (buzzer) {
+    p.buzzer = true;
     s.rahasia.antre = 0;
-    emit(ctx, { type: "buzzer_terbongkar", actor: p.id, payload: { target: target.id } });
+    s.lumbung += p.cuan; // uangnya masuk Lumbung
+    p.cuan = 0;
+    // usahanya dibagi ke warga, mulai dari yang paling sedikit uangnya
+    const penerima = [...hidup].sort((x, y) => x.cuan - y.cuan);
+    milik.forEach((x, k) => (x.t.owner = penerima[k % penerima.length].id));
+    emit(ctx, { type: "buzzer_terbongkar", actor: ctx.oleh ?? undefined, payload: { target: id } });
     addSemangat(ctx, R.BONGKAR_SEMANGAT, "buzzer_terbongkar");
     hitRezim(ctx, R.BONGKAR_DAMAGE, "buzzer_terbongkar");
-  } else {
-    if (!s.bersih.includes(target.id)) s.bersih.push(target.id);
-    emit(ctx, { type: "tuduh_salah", actor: p.id, payload: { target: target.id } });
-    transfer(ctx, p.id, BANK, Math.min(p.cuan, R.FITNAH_DENDA));
-    addSemangat(ctx, -R.FITNAH_SEMANGAT, "fitnah");
+    return;
+  }
+
+  p.cuan = 0;
+  milik.forEach((x) => (x.t.owner = GOV));
+  emit(ctx, { type: "salah_usir", payload: { target: id, disita: milik.map((x) => x.i) } });
+  addSemangat(ctx, -R.FITNAH_SEMANGAT, "fitnah");
+  if (isOver(s)) return;
+  // Mengusir warga tak bersalah dihitung seperti warga yang tumbang.
+  const tumbang = s.order.filter((pid) => s.players[pid].bankrupt && !s.players[pid].buzzer).length;
+  const adaManusia = s.order.some((pid) => !s.players[pid].bot);
+  if (tumbang >= R.BATAS_BANGKRUT_KALAH || hidup.length === 0 || (adaManusia && !hidup.some((x) => !x.bot))) {
+    endGame(ctx, { kind: "rakyat_kalah", reason: "bangkrut" });
   }
 }
 

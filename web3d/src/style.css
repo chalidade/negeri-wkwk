@@ -152,6 +152,19 @@ label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color
 .banner.good .b-title { color: #5dff9c; } .banner.bad .b-title { color: #ff6b7a; } .banner.gold .b-title { color: #ffd84d; }
 .banner.demo .b-title { color: #ffd84d; font-size: clamp(44px, 14vw, 76px); animation: shake .45s 3; }
 .banner.info .b-title { color: #fff; }
+.tally { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); width: min(90vw, 400px); background: #fff; border-radius: 22px; padding: 14px 14px 12px; box-shadow: 0 10px 0 rgba(0,0,0,.18), 0 18px 40px rgba(20,30,60,.35); animation: pop .3s cubic-bezier(.2,1.5,.4,1); }
+.tally.out { opacity: 0; transition: opacity .22s; }
+.t-title { font-family: var(--display); font-size: 21px; color: var(--ink); margin-bottom: 8px; }
+.t-row { display: flex; align-items: center; gap: 8px; background: #f1f4fa; border-radius: 14px; padding: 6px 10px 6px 6px; margin-top: 6px; font-size: 15px; color: var(--ink); }
+.t-row .ava { width: 34px; height: 34px; font-size: 18px; border-width: 2px; }
+.t-row .ava.abstain { background: #cdd5e3; }
+.t-row b { flex: none; max-width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-row.kena { background: #ffe3e7; box-shadow: inset 0 0 0 2px #ff6b7a; }
+.t-suara { flex: 1; display: flex; justify-content: flex-end; gap: 3px; flex-wrap: wrap; }
+.t-row .ava.mini { width: 24px; height: 24px; font-size: 13px; opacity: 0; animation: votein .28s cubic-bezier(.2,1.6,.4,1) forwards; }
+.t-n { font-family: var(--display); font-size: 18px; min-width: 14px; text-align: right; }
+.t-foot { margin-top: 10px; font-size: 13.5px; color: #5b6784; text-align: center; }
+@keyframes votein { from { opacity: 0; transform: scale(.2) translateY(8px); } to { opacity: 1; transform: none; } }
 .dice { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; animation: pop .2s; }
 .dice.out { opacity: 0; transition: opacity .2s; }
 .dice-row { display: flex; gap: 26px; perspective: 700px; justify-content: center; }

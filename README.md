@@ -17,7 +17,8 @@ Main di browser: https://negeri-wkwk.vercel.app
 - **Babak:** di mode solo, tiap menang Rezim berikutnya terbuka (10 babak, makin tebal dan makin rakus). Tiap game memberi bintang, XP pangkat, dan Emas Antum.
 - **MVP:** jasa tiap warga melawan Rezim dihitung; yang terbanyak dapat mahkota.
 - **Dadu Nasib:** sebagian kartu dan bencana ditentukan lemparan dadu. 2–5 mujur, 6–8 lumayan, 9–12 apes.
-- **Buzzer:** di mode solo, Rezim bisa menyuap seorang warga bot di tengah permainan (yang paling kepepet paling mungkin). Buzzer menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia tapi bisa dipalsukan untuk memfitnah warga lain. Tiap pemain punya satu kesempatan menuduh.
+- **Buzzer:** di mode solo, Rezim bisa menyuap seorang warga bot di tengah permainan (yang paling kepepet paling mungkin). Buzzer menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia tapi bisa dipalsukan untuk memfitnah warga lain. Buzzer bermain seperti warga biasa: ikut beli usaha, pakai jurus, bahkan bantu warga lain.
+- **Sidang Warga:** tiap pemain boleh memanggil sidang satu kali. Semua warga memilih siapa yang diusir (atau abstain), dan suara terbanyak keluar dari permainan. Kalau yang diusir memang buzzer, hartanya dibagi ke warga dan Rezim kena pukul. Kalau salah orang, hartanya disita Rezim dan semangat warga turun.
 - **Resmi atau pelicin:** buka dan upgrade usaha lewat jalur resmi (harga + izin 15%) atau uang pelicin (lebih murah 15%, tapi 25% kena OTT: denda DR 1,5 jt dan ditahan; tiap suap yang lolos memulihkan 2 Kekuasaan Rezim).
 - **Pinjol:** uang cair seketika; utang langsung +20%, berbunga 10% tiap ronde, dicicil DR 1 jt tiap gajian. Utang DR 6 jt ke atas membuat giliran dilewati.
 - **Bantu warga:** kirim uang ke warga lain; utang pinjolnya dilunasi dulu. Memberi poin jasa dan Semangat.

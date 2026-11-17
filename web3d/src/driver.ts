@@ -32,7 +32,7 @@ export interface Driver {
 
 // ------------------------------------------------------------------ solo
 
-const SOLO_KEY = "wkwk.solo.v5";
+const SOLO_KEY = "wkwk.solo.v6";
 interface SoloSave extends GameRow {
   roles: Record<string, Role>;
 }
@@ -41,7 +41,7 @@ function loadSolo(): SoloSave | null {
   try {
     const raw = localStorage.getItem(SOLO_KEY);
     const save = raw ? (JSON.parse(raw) as SoloSave) : null;
-    return save && save.state?.schema === 3 && save.state.jejak && save.state.rahasia && save.state.phase !== "game_over" ? save : null;
+    return save && save.state?.schema === 3 && save.state.jejak && save.state.rahasia && "sidang" in save.state && save.state.phase !== "game_over" ? save : null;
   } catch {
     return null;
   }
@@ -85,7 +85,7 @@ function soloDriver(save: SoloSave): Driver {
     botStep: async () => {
       const s = save.state;
       const id = s.order[s.turn];
-      if (s.phase === "game_over" || !s.players[id]?.bot) return;
+      if (s.phase === "game_over" || s.phase === "voting" || !s.players[id]?.bot) return;
       commit(id, decideBotAction(s, id, save.roles[id]));
     },
     subscribe(cb) {

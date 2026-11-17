@@ -178,7 +178,7 @@ export function startGame(
       c.el.classList.toggle("mvp", coop && p.jasa > 0 && p.jasa === jasaMaks);
       c.el.classList.toggle("buzzer", !!p.buzzer);
       const n = state.jejak[p.id] ?? 0;
-      c.badge.textContent = p.buzzer ? "🕵️" : state.bersih.includes(p.id) ? "✅" : n > 0 && p.id !== me ? `🔎${n}` : "";
+      c.badge.textContent = p.buzzer ? "🕵️" : p.diusir ? "😱" : n > 0 && p.id !== me ? `🔎${n}` : "";
     }
   }
 
@@ -237,6 +237,7 @@ export function startGame(
   }
 
   async function banner(kind: string, title: string, sub: string, ms: number): Promise<void> {
+    fx.querySelectorAll(".banner, .tally").forEach((b) => b.remove());
     const el = h("div", { class: `banner ${kind}` }, h("div", { class: "b-title" }, title), sub ? h("div", { class: "b-sub" }, sub) : null);
     fx.append(el);
     await wait(ms);
@@ -244,7 +245,46 @@ export function startGame(
     setTimeout(() => el.remove(), 260);
   }
 
-  /** Kartu besar di tengah layar. Tutup sendiri, atau ketuk untuk lanjut. */
+  /** Papan suara ala Among Us: siapa memilih siapa, muncul satu per satu. */
+  async function papanSuara(suara: Record<string, string>, keluar: string | null, pemain: GameState["players"]): Promise<void> {
+    fx.querySelectorAll(".banner, .tally").forEach((b) => b.remove());
+    const kelompok: Record<string, string[]> = {};
+    for (const [pemilih, target] of Object.entries(suara)) (kelompok[target || ""] ??= []).push(pemilih);
+    const urut = Object.entries(kelompok).sort((x, y) => (x[0] === "" ? 1 : 0) - (y[0] === "" ? 1 : 0) || y[1].length - x[1].length);
+    const ava = (id: string, extra = "") =>
+      h("span", { class: `ava ${extra}`, style: `background:${colorForSeat(pemain[id]?.seat ?? 0)}` }, PROFESSION_EMOJI[pemain[id]?.profession ?? ""] ?? "🙂");
+    let n = 0;
+    const el = h(
+      "div",
+      { class: "tally" },
+      h("div", { class: "t-title" }, "🗳️ Hasil Sidang"),
+      ...urut.map(([target, pemilih]) =>
+        h(
+          "div",
+          { class: `t-row${target && target === keluar ? " kena" : ""}` },
+          target ? ava(target) : h("span", { class: "ava abstain" }, "🤷"),
+          h("b", {}, target ? nm(target) : "Abstain"),
+          h(
+            "span",
+            { class: "t-suara" },
+            ...pemilih.map((v) => {
+              const dot = ava(v, "mini");
+              dot.style.animationDelay = `${(350 + 320 * n++) / speed}ms`;
+              return dot;
+            }),
+          ),
+          h("span", { class: "t-n" }, String(pemilih.length)),
+        ),
+      ),
+      h("div", { class: "t-foot" }, keluar ? `${nm(keluar)} diusir dari negeri. Tapi dia siapa sebenarnya?` : "Suara tidak cukup. Tidak ada yang diusir."),
+    );
+    fx.append(el);
+    for (let i = 0; i < n; i++) setTimeout(() => !disposed && sfx.click(), (350 + 320 * i) / speed);
+    await wait(1500 + 320 * n + (keluar ? 900 : 700));
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 240);
+  }
+
   /** Kartu Dadu Nasib yang masih terbuka, menunggu hasil lemparan. */
   let kartuNasib: { rows: HTMLElement[]; tutup: () => void } | null = null;
 
@@ -609,158 +649,33 @@ export function startGame(
           say(line!);
           await banner("info", "🔎 JEJAK DIGITAL", `Mengarah ke ${String(p.ke) === me ? "kamu (jelas palsu!)" : nm(String(p.ke))}. Bisa asli, bisa fitnah.`, 2000);
           break;
+        case "sidang_dibuka":
+          sfx.siren();
+          scene.overview();
+          say(line!);
+          await banner("info", "📣 SIDANG WARGA", `${mine ? "Kamu" : nm(a)} memanggil sidang. Siapa buzzernya?`, 1900);
+          break;
+        case "suara_masuk":
+          break;
+        case "hasil_sidang": {
+          say(line!);
+          await papanSuara(p.suara as Record<string, string>, (p.keluar as string | null) ?? null, next.players);
+          break;
+        }
         case "buzzer_terbongkar":
           sfx.fanfare();
           scene.burstAtPawn(String(p.target), "confetti");
+          scene.killPawn(String(p.target));
           say(line!, "good");
-          await banner("good", "BUZZER TERBONGKAR!", `${nm(String(p.target))} ternyata dibayar Rezim. ${mine ? "Tuduhanmu" : `Tuduhan ${nm(a)}`} tepat!`, 2400);
+          await banner("good", "BUZZER DIUSIR!", `${nm(String(p.target))} ternyata dibayar Rezim. Hartanya balik ke warga.`, 2600);
           break;
-        case "tuduh_salah":
-          sfx.bad();
-          say(line!, "bad");
-          await banner("bad", "SALAH TUDUH!", `${nm(String(p.target))} bukan buzzer. Semangat turun, ${mine ? "kamu" : nm(a)} kena denda.`, 2200);
-          break;
-        case "kena_tilang":
-          sfx.siren();
-          screenFx("siren", 1000);
-          if (a) await scene.teleportPawn(a, next.players[a].position);
-          say(line!, "bad");
-          if (mine) await banner("bad", "KENA TILANG!", "Lempar dadu kembar atau bayar denda buat bebas", 1300);
-          else await wait(500);
-          break;
-        case "semangat":
-          setBars(null, Number(p.ke));
-          if (Number(p.ke) > Number(p.dari)) floatAt(center(smFill.parentElement!), `+${Number(p.ke) - Number(p.dari)} ✊`, "plus");
-          else floatAt(center(smFill.parentElement!), `${Number(p.ke) - Number(p.dari)} ✊`, "minus");
-          await wait(220);
-          break;
-        case "demo_akbar":
-          setBars(null, 100);
-          sfx.fanfare();
-          navigator.vibrate?.([60, 40, 60, 40, 120]);
-          say(line!, "good");
-          void scene.demo(2900);
-          chants(9);
-          await banner("demo", "DEMO AKBAR!", `Rakyat turun ke jalan. Kekuasaan Rezim −${p.damage}`, 2600);
-          setBars(null, 0);
-          break;
-        case "kekuasaan": {
-          const d = Number(p.ke) - Number(p.dari);
-          setBars(Number(p.ke), null);
-          scene.setRezim(Number(p.ke) / next.kekuasaanMaks, Number(p.ke) <= batasPanik(next));
-          floatAt(bossPos(), d < 0 ? `${d} ❤️` : `+${d} ❤️`, d < 0 ? "hit" : "minus");
-          if (d < 0) {
-            sfx.hit();
-            hpBar.classList.remove("shake");
-            void hpBar.offsetWidth;
-            hpBar.classList.add("shake");
-            void scene.hitIstana();
-          }
-          await wait(520);
-          break;
-        }
-        case "rezim_panik":
-          sfx.siren();
-          screenFx("alarm", 1900);
-          say(line!, "bad");
-          await banner("bad", "REZIM PANIK!", "Kekuasaan tinggal separuh. Semua pungutan naik 1,5x", 1900);
-          break;
-        case "kampung_mandiri":
-          sfx.good();
-          scene.overview();
-          scene.waveTiles(groupTiles(String(p.grup)));
-          say(line!, "good");
-          await banner("good", "KAMPUNG MANDIRI!", `Satu warna dikuasai rakyat: omzet & sewa 2x, Kekuasaan −${p.damage}`, 1900);
-          break;
-        case "petisi":
-          sfx.good();
-          if (a) {
-            scene.burstAtPawn(a, "spark");
-            floatAt(scene.screenOfPawn(a), "✍️ Petisi!", "plus");
-          }
-          say(line!, "good");
-          await wait(450);
-          break;
-        case "titik_demo":
-          sfx.good();
-          if (a) {
-            scene.burstAtPawn(a, "confetti");
-            floatAt(scene.screenOfPawn(a), "✊ Orasi!", "plus");
-          }
-          say(line!, "good");
-          await wait(550);
-          break;
-        case "gotong_royong":
-          sfx.coin();
-          bills(bankPos(), center(lumbungChip), Number(p.jumlah));
-          say(line!, "good");
-          await wait(550);
-          break;
-        case "liputan_media":
-          sfx.good();
-          emojiFly(["📰", "📸", "🎥", "🎙️"], 12);
-          say(line!, "good");
-          await banner("good", "LIPUTAN MEDIA", `Borok Rezim terbongkar. Kekuasaan −${p.damage}`, 1200);
-          break;
-        case "talangan":
-          sfx.coin();
-          if (a) scene.burstAtPawn(a, "coins");
-          bills(center(lumbungChip), chipPos(a), Number(p.jumlah));
-          say(line!, "good");
-          await banner("gold", "DITALANGI LUMBUNG", `${nm(a)} diselamatkan warga: ${dr(p.jumlah)}`, 1500);
-          break;
-        case "jual_rugi":
-          sfx.bad();
-          scene.burstAtTile(Number(p.tile), "dust");
-          scene.syncTile(Number(p.tile), next.tiles[Number(p.tile)], next);
-          say(line!, "bad");
-          await wait(800);
-          break;
-        case "bangkrut":
+        case "salah_usir":
           sfx.lose();
-          if (a) {
-            scene.burstAtPawn(a, "smoke");
-            scene.killPawn(a);
-          }
+          scene.burstAtPawn(String(p.target), "smoke");
+          scene.killPawn(String(p.target));
+          for (const i of p.disita as number[]) scene.syncTile(i, next.tiles[i], next);
           say(line!, "bad");
-          await banner("bad", "BANGKRUT", `${nm(a)} tumbang. Satu lagi bangkrut, semua kalah.`, 1900);
-          break;
-        case "rezim_gerak":
-          scene.focusCar();
-          sfx.siren();
-          await wait(250);
-          await scene.moveCar(Number(p.dari), Number(p.ke));
-          await wait(200);
-          break;
-        case "rezim_caplok":
-          sfx.bad();
-          scene.focusTile(Number(p.tile));
-          await wait(250);
-          scene.burstAtTile(Number(p.tile), "smoke");
-          scene.shake(300, 0.14);
-          scene.syncTile(Number(p.tile), next.tiles[Number(p.tile)], next);
-          say(line!, "bad");
-          await banner("bad", p.alasan === "gusur" ? "DIGUSUR!" : "DICAPLOK REZIM", `${TILES[Number(p.tile)].name} sekarang aset Rezim`, 1300);
-          break;
-        case "rezim_upgrade":
-        case "usaha_rusak":
-          scene.burstAtTile(Number(p.tile), e.type === "usaha_rusak" ? "dust" : "smoke");
-          scene.syncTile(Number(p.tile), next.tiles[Number(p.tile)], next);
-          say(line!, "bad");
-          await wait(450);
-          break;
-        case "rezim_bayar":
-          sfx.coin();
-          scene.burstAtTile(Number(p.tile), "coins");
-          bills(bossPos(), chipPos(String(p.ke)), Number(p.jumlah));
-          say(line!, "good");
-          await banner("good", "PEJABAT KEPERGOK!", `Mampir di ${TILES[Number(p.tile)].name}: bayar ${dr(p.jumlah)} ke ${nm(String(p.ke)).toLowerCase() === "kamu" ? "kamu" : nm(String(p.ke))}`, 1500);
-          break;
-        case "lumbung_disunat":
-          sfx.pay();
-          bills(center(lumbungChip), bossPos(), Number(p.jumlah));
-          say(line!, "bad");
-          await wait(600);
+          await banner("bad", "SALAH ORANG!", `${nm(String(p.target))} ternyata warga biasa. Hartanya disita Rezim.`, 2600);
           break;
         case "ott":
           sfx.siren();
@@ -857,6 +772,12 @@ export function startGame(
   function afterIdle(): void {
     if (disposed) return;
     if (state.phase === "game_over") return void showGameOver();
+    if (state.phase === "voting") {
+      // Sidang berlangsung: kalau suaraku belum masuk, buka bilik suara.
+      const aku = state.players[me];
+      if (aku && !aku.bankrupt && state.sidang && state.sidang.suara[me] === undefined) showVote();
+      return;
+    }
     const cur = state.players[state.order[state.turn]];
     if (!cur?.bot || !state.players[me]) return;
     // Online: kalau ada beberapa manusia, yang kursinya paling depan jadi penggerak utama.
@@ -1122,13 +1043,14 @@ export function startGame(
     const locked = sending || playing;
     const meP = state.players[me];
     const cur = state.players[state.order[state.turn]];
-    const giliranku = myTurn() && !!meP && !meP.bankrupt;
+    const giliranku = myTurn() && !!meP && !meP.bankrupt && state.phase !== "voting";
     let pill = "";
     let utama: HTMLElement | null = null;
     let tawaran: HTMLElement | null = null;
     let meteran: HTMLElement | null = null;
 
     if (state.phase === "game_over") pill = "Permainan selesai";
+    else if (state.phase === "voting") pill = "🗳️ Sidang Warga berlangsung…";
     else if (!meP) pill = `👀 Giliran ${cur.name}`;
     else if (meP.bankrupt) pill = "💀 Kamu bangkrut";
     else if (!myTurn()) pill = cur.bot ? `🤖 ${cur.name}…` : `⏳ ${cur.name}…`;
@@ -1332,6 +1254,11 @@ export function startGame(
           meP.jailTurns > 0 && o.rolling
             ? arow("🤝", "Damai di tempat", "Separuh harga, tapi 1 dari 4 kena OTT", drPendek(DENDA_TILANG / 2), meP.cuan >= DENDA_TILANG / 2, "Uangmu nggak cukup.", lakukan({ type: "bayar_denda", jalur: "pelicin" }))
             : null,
+          coop
+            ? arow("📣", "Sidang Warga", "Semua memilih, suara terbanyak diusir", meP.sudahSidang ? "sudah" : "1x",
+                !meP.sudahSidang && playersInOrder(state).filter((p) => !p.bankrupt).length >= 3,
+                meP.sudahSidang ? "Kamu sudah pernah memanggil sidang." : "Sidang butuh minimal 3 warga.", () => (close(), panggilSidang()))
+            : null,
           arow("🤝", "Bantu warga", "Lunasi utang teman atau kirim uang", "pilih", meP.cuan >= 500_000, "Uangmu sendiri lagi tipis.", () => (close(), showBantu())),
           coop ? arow("🌾", "Sumbang Lumbung", "Dana talangan bersama", "pilih", meP.cuan >= 500_000, "Uangmu sendiri lagi tipis.", () => (close(), showLumbung())) : null,
         ];
@@ -1457,18 +1384,9 @@ export function startGame(
       coop && id !== me
         ? h(
             "div",
-            { class: "tag", style: `background:${p.buzzer ? "var(--red)" : state.bersih.includes(id) ? "var(--green)" : "#8a97ad"}` },
-            p.buzzer
-              ? "🕵️ Buzzer (terbongkar)"
-              : state.bersih.includes(id)
-                ? "✅ Bukan buzzer (pernah salah dituduh)"
-                : `🔎 Jejak mengarah ke dia: ${state.jejak[id] ?? 0} kali`,
+            { class: "tag", style: `background:${p.buzzer ? "var(--red)" : "#8a97ad"}` },
+            p.buzzer ? "🕵️ Buzzer (sudah diusir)" : p.diusir ? "😱 Diusir, ternyata warga biasa" : `🔎 Jejak mengarah ke dia: ${state.jejak[id] ?? 0} kali`,
           )
-        : null,
-      coop && id !== me && !p.buzzer && !p.bankrupt && !state.bersih.includes(id) && state.players[me] && !state.players[me].sudahTuduh
-        ? myTurn() && !playing && state.phase !== "awaiting_buy"
-          ? h("button", { class: "btn small red", onclick: () => tuduh(id) }, "🕵️ Tuduh sebagai buzzer")
-          : h("div", { class: "muted small" }, "Menuduh hanya bisa di giliranmu.")
         : null,
       row("Uang", dr(p.cuan)),
       p.utang > 0 ? row("Utang pinjol", dr(p.utang)) : null,
@@ -1509,26 +1427,58 @@ export function startGame(
       state.kekuasaan <= batasPanik(state)
         ? h("div", { class: "tag", style: "background:var(--red)" }, "Rezim panik: semua pungutan 1,5x")
         : h("div", { class: "muted" }, "Kalau Kekuasaan tinggal separuh, Rezim panik dan semua pungutan jadi 1,5x."),
-      h("div", { class: "muted" }, "🕵️ Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer menyabotase tiap ronde tanpa nama. Jejak digital (🔎) sering mengarah ke dia, tapi kadang dipalsukan buat memfitnah. Ketuk warga yang kamu curigai untuk menuduh."),
+      h("div", { class: "muted" }, "🕵️ Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer tetap terlihat seperti warga biasa, tapi menyabotase tiap ronde tanpa nama. Jejak digital (🔎) sering mengarah ke dia, kadang dipalsukan buat memfitnah. Curiga? Panggil Sidang Warga lewat ⚡ Aksi."),
     );
   }
 
-  function tuduh(id: string): void {
-    const p = state.players[id];
+  /** Memanggil Sidang Warga (sekali per permainan). */
+  function panggilSidang(): void {
     const close = modal(
       h(
         "div",
         { class: "sheet col" },
-        h("div", { class: "sheet-title" }, `🕵️ Tuduh ${p.name} buzzer?`),
-        h("div", { class: "muted" }, `Jejak yang mengarah ke dia: ${state.jejak[id] ?? 0} kali. Ingat, jejak bisa dipalsukan, dan bisa saja belum ada buzzer sama sekali.`),
-        h("div", { class: "muted" }, "Benar: buzzer terbongkar, Kekuasaan −12 dan Semangat +20. Salah: kamu didenda DR 1,5 jt dan Semangat −12. Kamu cuma punya satu kesempatan per permainan."),
+        h("div", { class: "sheet-title" }, "📣 Panggil Sidang Warga?"),
+        h("div", { class: "muted" }, "Semua warga memilih siapa yang diusir. Suara terbanyak keluar dari permainan (seri atau kebanyakan abstain: tidak ada yang diusir)."),
+        h("div", { class: "muted" }, `Kalau dia buzzer: hartanya balik ke warga, Kekuasaan −12, Semangat +20. Kalau bukan: hartanya disita Rezim dan Semangat −12. Dua warga tumbang berarti kalah. Kamu cuma bisa memanggil sidang sekali.`),
         h(
           "div",
           { class: "row" },
           h("button", { class: "btn grey", style: "flex:1", onclick: () => close() }, "Batal"),
-          h("button", { class: "btn red", style: "flex:1", onclick: () => (close(), void send({ type: "tuduh", target: id })) }, "Tuduh!"),
+          h("button", { class: "btn red", style: "flex:1", onclick: () => (close(), void send({ type: "sidang" })) }, "Panggil"),
         ),
       ),
+    );
+  }
+
+  /** Bilik suara: muncul saat sidang berlangsung dan suaraku belum masuk. */
+  let bilikTerbuka = false;
+  function showVote(): void {
+    if (bilikTerbuka || disposed) return;
+    bilikTerbuka = true;
+    const lain = playersInOrder(state).filter((p) => p.id !== me && !p.bankrupt);
+    const pilih = (target: string | null) => () => {
+      close();
+      void send({ type: "vote", target });
+    };
+    const close = modal(
+      h(
+        "div",
+        { class: "sheet col" },
+        h("div", { class: "sheet-title" }, "🗳️ Sidang Warga"),
+        h("div", { class: "muted" }, `${nm(state.sidang?.pemanggil)} memanggil sidang. Siapa yang menurutmu buzzer? Jejak bisa dipalsukan, jadi lihat juga siapa yang jarang ikut melawan.`),
+        ...lain.map((p) =>
+          h(
+            "button",
+            { class: "arow", onclick: pilih(p.id) },
+            h("span", { class: "ava", style: `background:${colorForSeat(p.seat)}` }, PROFESSION_EMOJI[p.profession] ?? ""),
+            h("span", { class: "a-main" }, h("b", {}, p.name), h("small", {}, `🔎 jejak ${state.jejak[p.id] ?? 0}  ·  ⭐ jasa ${p.jasa}  ·  ${drPendek(p.cuan)}`)),
+            h("span", { class: "a-label" }, "usir"),
+          ),
+        ),
+        h("button", { class: "btn grey block", onclick: pilih(null) }, "Abstain (tidak yakin)"),
+      ),
+      () => (bilikTerbuka = false),
+      false,
     );
   }
 
