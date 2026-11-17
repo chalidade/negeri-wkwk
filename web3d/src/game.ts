@@ -7,7 +7,7 @@ import { ava, ic, rezimAva } from "./icons.ts";
 import { GameScene } from "./scene/game-scene.ts";
 import { isMuted, mulaiMusik, musikNyala, sfx, toggleMusik, toggleMute } from "./sfx.ts";
 import { describe, resultTitle } from "./story.ts";
-import { catatMisi } from "./toko.ts";
+import { catatMisi, hasilAmplop, jatahAmplop, ringkasAlbum, tambahAmplop } from "./toko.ts";
 import {
   BABAK,
   BABAK_FITUR,
@@ -878,8 +878,28 @@ export function startGame(
           scene.shake(300, 0.14);
           scene.syncTile(Number(p.tile), next.tiles[Number(p.tile)], next);
           say(line!, "bad");
-          await banner("bad", p.alasan === "gusur" ? "DIGUSUR!" : "DICAPLOK REZIM", `${TILES[Number(p.tile)].name} sekarang aset Rezim`, 1300);
+          await banner(
+            "bad",
+            p.alasan === "gusur" ? "DIGUSUR!" : p.alasan === "ambil_alih" ? "DIAMBIL ALIH!" : "DICAPLOK REZIM",
+            p.alasan === "ambil_alih"
+              ? `${TILES[Number(p.tile)].name} milik ${nm(String(p.dari))} jadi aset Rezim${Number(p.ganti) > 0 ? `, ganti rugi ${dr(Number(p.ganti))}` : ", tanpa ganti rugi"}`
+              : `${TILES[Number(p.tile)].name} sekarang aset Rezim`,
+            p.alasan === "ambil_alih" ? 1900 : 1300,
+          );
           break;
+        case "pajak_kekayaan": {
+          // yang paling tajir bayar paling banyak: tunjukkan potongan tiap warga
+          const daftar = p.daftar as { id: string; jumlah: number }[];
+          sfx.pay();
+          for (const d of daftar) {
+            bills(chipPos(d.id), bossPos(), d.jumlah);
+            floatAt(chipPos(d.id), `−${dr(d.jumlah)}`, "hit");
+          }
+          say(line!, "bad");
+          if (daftar[0]?.id === me) await banner("bad", "KAMU PALING TAJIR", `Pajakmu paling besar: −${dr(daftar[0].jumlah)}`, 1500);
+          else await wait(900);
+          break;
+        }
         case "rezim_upgrade":
         case "usaha_rusak":
           scene.burstAtTile(Number(p.tile), e.type === "usaha_rusak" ? "dust" : "smoke");
@@ -1051,6 +1071,24 @@ export function startGame(
     } else res.win ? sfx.fanfare() : sfx.lose();
     const pk = pangkat(stats.xp);
     const lanjut = hadiah.babakBaru ?? state.level;
+    // amplop stiker: selalu dapat, lebih banyak kalau menang. Dibuka sendiri biar ada yang ditunggu.
+    tambahAmplop(jatahAmplop(hadiah.bintang > 0, hadiah.bintang));
+    const amplop = h("div", { class: "col", style: "gap:7px" });
+    amplop.append(
+      h(
+        "button",
+        {
+          class: "btn amplop",
+          onclick: () => {
+            const isi = hasilAmplop();
+            const r = ringkasAlbum();
+            amplop.replaceChildren(isi, h("div", { class: "muted small" }, `Album stiker: ${r.punya} dari ${r.total}. Menang dapat 2 amplop, bintang tiga dapat 3.`));
+          },
+        },
+        ic("kartu"),
+        `Buka ${ringkasAlbum().amplop} amplop stiker`,
+      ),
+    );
     modal(
       h(
         "div",
@@ -1080,6 +1118,12 @@ export function startGame(
         ),
         h("div", { class: "reward" }, h("b", {}, `+${hadiah.xp} XP`), hadiah.emas > 0 ? h("b", {}, ic("koin"), `+${hadiah.emas} Emas Antum`) : null),
         h("div", { class: "xpbar" }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` }), h("b", {}, pk.berikut ? `${pk.nama}, menuju ${pk.berikut}` : pk.nama)),
+        hadiah.bonusBeruntun > 0
+          ? h("div", { class: "beruntun" }, ic("petir"), `Menang beruntun ${hadiah.beruntun} kali, bonus +${hadiah.bonusBeruntun} emas`)
+          : hadiah.putus >= 2
+            ? h("div", { class: "muted small" }, `Rentetan menang ${hadiah.putus} kali putus di sini.`)
+            : null,
+        amplop,
         menangBuzzer ? h("div", { class: "muted small" }, "Menang sebagai buzzer: +10 Emas Antum, tapi babak berikutnya tidak terbuka.") : null,
         hadiah.babakBaru ? h("div", { class: "unlock" }, ic("gembok"), `Babak ${hadiah.babakBaru} terbuka: ${BABAK[hadiah.babakBaru - 1].nama}`) : null,
         coop

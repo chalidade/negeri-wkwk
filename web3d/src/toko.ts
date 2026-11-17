@@ -1,7 +1,7 @@
-// Emas Antum: toko kosmetik dan misi harian. Semuanya tersimpan di perangkat.
-import { h, modal, toast } from "./dom.ts";
+// Emas Antum: toko kosmetik, misi harian, bansos harian, dan album stiker. Semuanya tersimpan di perangkat.
+import { h, modal, nodes, toast } from "./dom.ts";
 import { getStats, ubahEmas } from "./help.ts";
-import { ic } from "./icons.ts";
+import { ava, ic, rezimAva } from "./icons.ts";
 import { sfx } from "./sfx.ts";
 
 // ------------------------------------------------------------------ toko
@@ -175,7 +175,7 @@ export function ringkasMisi(): { selesai: number; total: number; adaHadiah: bool
   const hr = getHarian();
   const daftar = misiHariIni();
   const beres = daftar.filter((m) => (hr.maju[m.id] ?? 0) >= m.target);
-  return { selesai: beres.length, total: daftar.length, adaHadiah: beres.some((m) => !hr.klaim.includes(m.id)) };
+  return { selesai: beres.length, total: daftar.length, adaHadiah: beres.some((m) => !hr.klaim.includes(m.id)) || statusBansos().bisa };
 }
 
 export function showMisi(onChange: () => void): void {
@@ -185,6 +185,16 @@ export function showMisi(onChange: () => void): void {
     isi.replaceChildren(
       h("div", { class: "sheet-title" }, ic("bintang"), "Misi hari ini"),
       h("div", { class: "muted" }, "Tiga misi baru tiap hari. Hadiahnya Emas Antum buat belanja di toko."),
+      (() => {
+        const b = statusBansos();
+        return h(
+          "button",
+          { class: "arow", onclick: () => showBansos(() => (onChange(), lukis())) },
+          h("span", { class: "a-icon" }, ic(b.bisa ? "bantu" : "centang")),
+          h("span", { class: "a-main" }, h("b", {}, "Bansos harian"), h("small", {}, b.bisa ? `Jatah hari ke-${b.ke} belum diambil` : `Hari ke-${b.ke} sudah diambil, besok lagi`)),
+          h("span", { class: "a-label" }, b.bisa ? ic("koin") : null, b.bisa ? `+${b.hadiah}` : null),
+        );
+      })(),
       ...misiHariIni().map((m) => {
         const n = Math.min(m.target, hr.maju[m.id] ?? 0);
         const beres = n >= m.target;
@@ -215,6 +225,297 @@ export function showMisi(onChange: () => void): void {
       }),
       h("button", { class: "btn grey", onclick: () => close() }, "Tutup"),
     );
+  };
+  lukis();
+  const close = modal(h("div", { class: "sheet" }, isi));
+}
+
+// ------------------------------------------------------------------ bansos harian
+
+/** Jatah Emas Antum untuk hari ke-1 sampai ke-7. Hari ke-7 ditambah satu amplop stiker, lalu balik ke hari 1. */
+const BANSOS = [5, 5, 8, 8, 10, 12, 25];
+interface Absen {
+  /** nomor hari terakhir mengambil */
+  hari: number;
+  /** posisi di putaran 7 hari */
+  ke: number;
+  beruntun: number;
+}
+const ABSEN_KEY = "wkwk.harian";
+/** Nomor hari menurut jam HP pemain: berganti tepat tengah malam waktu setempat. */
+const nomorHari = (): number => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60_000) / 86_400_000);
+
+function getAbsen(): Absen {
+  try {
+    const a = JSON.parse(localStorage.getItem(ABSEN_KEY) ?? "null") as Absen | null;
+    if (a && Number.isFinite(a.hari)) return a;
+  } catch {
+    // data rusak: mulai dari hari 1
+  }
+  return { hari: -9, ke: 0, beruntun: 0 };
+}
+
+export function statusBansos(): { bisa: boolean; ke: number; beruntun: number; hadiah: number } {
+  const a = getAbsen();
+  const kini = nomorHari();
+  // sudah ambil hari ini (atau jam HP dimundurkan): tidak bisa ambil lagi
+  if (a.hari >= kini) return { bisa: false, ke: a.ke, beruntun: a.beruntun, hadiah: BANSOS[a.ke - 1] };
+  const lanjut = a.hari === kini - 1;
+  const ke = lanjut ? (a.ke % BANSOS.length) + 1 : 1;
+  return { bisa: true, ke, beruntun: lanjut ? a.beruntun + 1 : 1, hadiah: BANSOS[ke - 1] };
+}
+
+export function showBansos(onChange: () => void): void {
+  const isi = h("div", { class: "col", style: "gap:10px" });
+  const lukis = () => {
+    const b = statusBansos();
+    isi.replaceChildren(...nodes(
+      h("div", { class: "sheet-title" }, ic("bantu"), "Bansos harian"),
+      h(
+        "div",
+        { class: "muted" },
+        b.bisa ? "Yang ini beneran cair. Datang tiap hari, jatahnya makin besar." : `Jatah hari ini sudah diambil. Besok giliran hari ke-${(b.ke % BANSOS.length) + 1}.`,
+      ),
+      h(
+        "div",
+        { class: "bansos" },
+        ...BANSOS.map((n, i) => {
+          const hari = i + 1;
+          const sudah = hari < b.ke || (hari === b.ke && !b.bisa);
+          return h(
+            "div",
+            { class: `hari${sudah ? " sudah" : ""}${hari === b.ke && b.bisa ? " kini" : ""}${hari === BANSOS.length ? " puncak" : ""}` },
+            h("small", {}, `Hari ${hari}`),
+            ic(sudah ? "centang" : "koin"),
+            h("b", {}, hari === BANSOS.length ? `+${n} dan amplop stiker` : `+${n}`),
+          );
+        }),
+      ),
+      h("div", { class: "muted small" }, "Bolong sehari, hitungan balik ke hari 1."),
+      b.bisa
+        ? h(
+            "button",
+            {
+              class: "btn big green",
+              onclick: () => {
+                localStorage.setItem(ABSEN_KEY, JSON.stringify({ hari: nomorHari(), ke: b.ke, beruntun: b.beruntun } satisfies Absen));
+                ubahEmas(b.hadiah);
+                if (b.ke === BANSOS.length) tambahAmplop(1);
+                sfx.coin();
+                onChange();
+                lukis();
+              },
+            },
+            `Ambil +${b.hadiah} emas`,
+          )
+        : null,
+      h("button", { class: "btn grey", onclick: () => close() }, b.bisa ? "Nanti saja" : "Tutup"),
+    ));
+  };
+  lukis();
+  const close = modal(h("div", { class: "sheet" }, isi));
+}
+
+// ------------------------------------------------------------------ album stiker
+
+type Langka = "biasa" | "langka" | "sultan";
+interface Stiker {
+  id: string;
+  nama: string;
+  ket: string;
+  /** halaman album */
+  hal: number;
+  langka: Langka;
+  /** nama ikon, atau profesi untuk stiker warga */
+  ikon?: string;
+  profesi?: string;
+}
+const HALAMAN = ["Warga", "Rezim", "Perlawanan"];
+const STIKER: Stiker[] = [
+  { id: "buruh", hal: 0, langka: "biasa", profesi: "buruh", nama: "Buruh", ket: "Gaji UMR, cicilan sultan." },
+  { id: "pedagang", hal: 0, langka: "biasa", profesi: "pedagang", nama: "Pedagang", ket: "Untung tipis, pungli tebal." },
+  { id: "ojol", hal: 0, langka: "biasa", profesi: "ojol", nama: "Ojol", ket: "Bintang lima, bensin sendiri." },
+  { id: "kreator", hal: 0, langka: "langka", profesi: "kreator", nama: "Kreator", ket: "Kontennya viral, endorse belum cair." },
+  { id: "jurnalis", hal: 0, langka: "langka", profesi: "jurnalis", nama: "Jurnalis", ket: "Nulis fakta, dituduh hoaks." },
+  { id: "mahasiswa", hal: 0, langka: "langka", profesi: "mahasiswa", nama: "Mahasiswa", ket: "Skripsi nanti, demo dulu." },
+  { id: "mobil", hal: 1, langka: "biasa", ikon: "mobil", nama: "Mobil Pejabat", ket: "Lampu merah bukan urusannya." },
+  { id: "pelicin", hal: 1, langka: "biasa", ikon: "uang", nama: "Uang Pelicin", ket: "Biar urusan lancar jaya." },
+  { id: "buzzer", hal: 1, langka: "langka", ikon: "robot", nama: "Buzzer", ket: "Akun baru, opini seragam." },
+  { id: "aparat", hal: 1, langka: "langka", ikon: "sirene", nama: "Aparat", ket: "Mengayomi, katanya." },
+  { id: "kursi", hal: 1, langka: "langka", ikon: "kursi", nama: "Kursi Empuk", ket: "Sekali duduk, ogah berdiri." },
+  { id: "rezim", hal: 1, langka: "sultan", nama: "Sang Rezim", ket: "Senyumnya ada di semua baliho." },
+  { id: "toa", hal: 2, langka: "biasa", ikon: "toa", nama: "Toa Demo", ket: "Suara rakyat, volume penuh." },
+  { id: "petisi", hal: 2, langka: "biasa", ikon: "petisi", nama: "Petisi", ket: "Tanda tangan dulu, viral kemudian." },
+  { id: "koran", hal: 2, langka: "biasa", ikon: "koran", nama: "Koran Pagi", ket: "Berita utama: warga masih sabar." },
+  { id: "palu", hal: 2, langka: "langka", ikon: "palu", nama: "Palu Sidang", ket: "Tok! Yang salah siapa, ya." },
+  { id: "lumbung", hal: 2, langka: "langka", ikon: "karung", nama: "Lumbung", ket: "Patungan warga, bukan anggaran." },
+  { id: "mahkota", hal: 2, langka: "sultan", ikon: "mahkota", nama: "Mahkota Rakyat", ket: "Kedaulatan balik ke pemiliknya." },
+];
+const LABEL_LANGKA: Record<Langka, string> = { biasa: "biasa", langka: "langka", sultan: "sultan" };
+/** Stiker dobel ditukar jadi Emas Antum. */
+const NILAI_DOBEL: Record<Langka, number> = { biasa: 2, langka: 5, sultan: 15 };
+const BONUS_HALAMAN = 30;
+const BONUS_TAMAT = 100;
+export const HARGA_AMPLOP = 20;
+
+interface Album {
+  /** berapa kali tiap stiker didapat */
+  punya: Record<string, number>;
+  /** amplop yang belum dibuka */
+  amplop: number;
+  /** halaman yang bonusnya sudah diberikan */
+  hal: number[];
+  tamat: boolean;
+}
+const ALBUM_KEY = "wkwk.album";
+
+function getAlbum(): Album {
+  try {
+    const a = JSON.parse(localStorage.getItem(ALBUM_KEY) ?? "null") as Album | null;
+    if (a) return { punya: a.punya ?? {}, amplop: a.amplop ?? 0, hal: a.hal ?? [], tamat: !!a.tamat };
+  } catch {
+    // data rusak: album kosong
+  }
+  return { punya: {}, amplop: 0, hal: [], tamat: false };
+}
+const simpanAlbum = (a: Album) => localStorage.setItem(ALBUM_KEY, JSON.stringify(a));
+
+/** Jatah amplop sehabis satu permainan: kalah 1, menang 2, menang bintang tiga 3. */
+export const jatahAmplop = (menang: boolean, bintang: number): number => (menang ? (bintang >= 3 ? 3 : 2) : 1);
+
+export function tambahAmplop(n: number): void {
+  const a = getAlbum();
+  a.amplop += n;
+  simpanAlbum(a);
+}
+
+export function ringkasAlbum(): { punya: number; total: number; amplop: number } {
+  const a = getAlbum();
+  return { punya: STIKER.filter((s) => a.punya[s.id]).length, total: STIKER.length, amplop: a.amplop };
+}
+
+interface Tarikan {
+  stiker: Stiker;
+  baru: boolean;
+  /** Emas Antum pengganti kalau dobel */
+  emas: number;
+}
+
+/** Ambil satu stiker. Yang belum dipunya sedikit diutamakan, biar album tidak mustahil dilengkapi. */
+function tarik(a: Album): Stiker {
+  const r = Math.random();
+  const langka: Langka = r < 0.08 ? "sultan" : r < 0.38 ? "langka" : "biasa";
+  const kolam = STIKER.filter((s) => s.langka === langka);
+  const belum = kolam.filter((s) => !a.punya[s.id]);
+  const dari = belum.length > 0 && Math.random() < 0.55 ? belum : kolam;
+  return dari[Math.floor(Math.random() * dari.length)];
+}
+
+/** Buka semua amplop yang tersimpan. Stiker dobel dan bonus halaman langsung jadi Emas Antum. */
+export function bukaAmplop(): { tarikan: Tarikan[]; bonus: string[] } {
+  const a = getAlbum();
+  const tarikan: Tarikan[] = [];
+  const bonus: string[] = [];
+  let emas = 0;
+  while (a.amplop > 0) {
+    a.amplop -= 1;
+    const stiker = tarik(a);
+    const baru = !a.punya[stiker.id];
+    a.punya[stiker.id] = (a.punya[stiker.id] ?? 0) + 1;
+    const ganti = baru ? 0 : NILAI_DOBEL[stiker.langka];
+    emas += ganti;
+    tarikan.push({ stiker, baru, emas: ganti });
+  }
+  HALAMAN.forEach((nama, hal) => {
+    if (a.hal.includes(hal) || !STIKER.filter((s) => s.hal === hal).every((s) => a.punya[s.id])) return;
+    a.hal.push(hal);
+    emas += BONUS_HALAMAN;
+    bonus.push(`Halaman ${nama} lengkap, +${BONUS_HALAMAN} emas`);
+  });
+  if (!a.tamat && STIKER.every((s) => a.punya[s.id])) {
+    a.tamat = true;
+    emas += BONUS_TAMAT;
+    bonus.push(`Album tamat, +${BONUS_TAMAT} emas`);
+  }
+  simpanAlbum(a);
+  if (emas > 0) ubahEmas(emas);
+  return { tarikan, bonus };
+}
+
+function kartuStiker(s: Stiker, punya: number, tanda?: string): HTMLElement {
+  const gambar = punya > 0 ? (s.profesi ? ava(s.profesi, STIKER.indexOf(s)) : s.ikon ? ic(s.ikon) : rezimAva()) : ic("tanya");
+  return h(
+    "div",
+    { class: `stiker ${s.langka}${punya > 0 ? "" : " kosong"}`, title: punya > 0 ? s.ket : "Belum punya" },
+    tanda ? h("span", { class: "tanda" }, tanda) : null,
+    h("span", { class: "gambar" }, gambar),
+    h("b", {}, punya > 0 ? s.nama : "???"),
+    h("small", {}, punya > 0 ? s.ket : LABEL_LANGKA[s.langka]),
+  );
+}
+
+/** Deretan stiker hasil buka amplop, muncul satu per satu. */
+export function hasilAmplop(): HTMLElement {
+  const { tarikan, bonus } = bukaAmplop();
+  sfx.coin();
+  return h(
+    "div",
+    { class: "col", style: "gap:7px" },
+    h(
+      "div",
+      { class: "stiker-baris" },
+      ...tarikan.map((t, i) => {
+        const el = kartuStiker(t.stiker, 1, t.baru ? "baru" : `dobel +${t.emas}`);
+        el.classList.add("muncul");
+        if (!t.baru) el.classList.add("dobel");
+        el.style.animationDelay = `${i * 0.22}s`;
+        return el;
+      }),
+    ),
+    ...bonus.map((b) => h("div", { class: "unlock" }, ic("bintang"), b)),
+  );
+}
+
+export function showAlbum(onChange: () => void): void {
+  const isi = h("div", { class: "col", style: "gap:10px" });
+  const lukis = (hasil?: HTMLElement) => {
+    const a = getAlbum();
+    const r = ringkasAlbum();
+    const emas = getStats().emas;
+    isi.replaceChildren(...nodes(
+      h("div", { class: "sheet-title" }, ic("kartu"), "Album stiker"),
+      h("div", { class: "muted" }, `${r.punya} dari ${r.total} stiker. Tiap habis main dapat amplop: kalah 1, menang 2, bintang tiga 3.`),
+      hasil ?? null,
+      a.amplop > 0
+        ? h("button", { class: "btn big green", onclick: () => (lukis(hasilAmplop()), onChange()) }, ic("kartu"), `Buka ${a.amplop} amplop`)
+        : null,
+      ...HALAMAN.flatMap((nama, hal) => {
+        const daftar = STIKER.filter((s) => s.hal === hal);
+        const n = daftar.filter((s) => a.punya[s.id]).length;
+        return [
+          h("label", {}, `${nama}, ${n} dari ${daftar.length}${a.hal.includes(hal) ? " (lengkap)" : ""}`),
+          h("div", { class: "stiker-grid" }, ...daftar.map((s) => kartuStiker(s, a.punya[s.id] ?? 0))),
+        ];
+      }),
+      h("div", { class: "muted small" }, `Stiker dobel ditukar Emas Antum. Satu halaman lengkap +${BONUS_HALAMAN} emas, album tamat +${BONUS_TAMAT} emas.`),
+      !a.tamat && h(
+        "button",
+        {
+          class: "btn grey",
+          onclick: () => {
+            if (emas < HARGA_AMPLOP) return toast(`Emas Antum kurang ${HARGA_AMPLOP - emas}. Kumpulkan lewat misi, bansos, dan kemenangan.`);
+            ubahEmas(-HARGA_AMPLOP);
+            tambahAmplop(1);
+            lukis(hasilAmplop());
+            onChange();
+          },
+        },
+        ic("koin"),
+        `Beli 1 amplop, ${HARGA_AMPLOP} emas`,
+      ),
+      h("button", { class: "btn grey", onclick: () => close() }, "Tutup"),
+    ));
+    if (hasil) isi.parentElement?.scrollTo({ top: 0 });
   };
   lukis();
   const close = modal(h("div", { class: "sheet" }, isi));

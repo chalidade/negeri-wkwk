@@ -22,7 +22,7 @@ import * as R from "../functions/_shared/engine/rules.ts";
 
 const JT = 1_000_000;
 /** nyawa Rezim di babak 1 untuk n pemain */
-const K = (n: number) => Math.round(R.KEKUASAAN_AWAL[n] * R.nyawaBabak(1));
+const K = (n: number) => R.kekuasaanAwal(n, 1);
 const IDS = ["andi", "budi", "citra", "dewi"];
 
 function setup(n = 4, pro: Profession = "buruh", mode: "rakyat_bersatu" | "juragan" = "rakyat_bersatu"): GameState {
@@ -241,6 +241,52 @@ describe("melawan Rezim", () => {
     assert.equal(r.state.kekuasaan, K(2) - 10 + Math.max(1, Math.round((R.BELANJA_CITRA * 2) / 4)));
   });
 
+  it("Diambil Alih Negara: usaha rakyat termahal jadi aset Rezim, ganti rugi tergantung Dadu Nasib", () => {
+    const awal = () => {
+      const s = setup(2);
+      s.tiles[1] = { owner: "andi", level: 0 };
+      s.tiles[19] = { owner: "budi", level: 2 }; // paling bernilai: harga petak x 2
+      s.turn = 1;
+      s.phase = "awaiting_end";
+      return s;
+    };
+    const harga = TILES[19].price!;
+    // kebijakan ke-8, Dadu Nasib 3+3 (ganti rugi separuh nilai), dadu Rezim 1+1
+    const separuh = act(awal(), "budi", { type: "end_turn" }, [8, 3, 3, 1, 1]);
+    assert.equal(separuh.events.find((e) => e.type === "kebijakan")!.payload.id, "ambil_alih");
+    const caplok = separuh.events.find((e) => e.type === "rezim_caplok")!;
+    assert.deepEqual(caplok.payload, { tile: 19, dari: "budi", alasan: "ambil_alih", ganti: harga });
+    assert.deepEqual(separuh.state.tiles[19], { owner: GOV, level: 2 });
+    assert.equal(separuh.state.tiles[1].owner, "andi");
+    // Dadu Nasib 5+5: tanpa ganti rugi, selisihnya persis sebesar ganti rugi tadi
+    const nol = act(awal(), "budi", { type: "end_turn" }, [8, 5, 5, 1, 1]);
+    assert.equal(nol.state.tiles[19].owner, GOV);
+    assert.equal(separuh.state.players.budi.cuan - nol.state.players.budi.cuan, harga);
+    // Dadu Nasib 1+1: warga menolak, batal, Semangat naik
+    const batal = act(awal(), "budi", { type: "end_turn" }, [8, 1, 1, 1, 1]);
+    assert.equal(batal.state.tiles[19].owner, "budi");
+    assert.ok(!batal.events.some((e) => e.type === "rezim_caplok" && e.payload.alasan === "ambil_alih"));
+    assert.equal(batal.state.semangat, 8);
+  });
+
+  it("Pajak Orang Kaya: yang paling kaya kena tarif paling besar", () => {
+    const s = setup(3);
+    s.players.andi.cuan = 10 * JT;
+    s.players.budi.cuan = 30 * JT;
+    s.players.citra.cuan = 20 * JT;
+    s.tiles[1] = { owner: "andi", level: 0 }; // usaha ikut dihitung, tapi andi tetap yang termiskin
+    s.turn = 2;
+    s.phase = "awaiting_end";
+    // kebijakan ke-9, belanja Rezim 50 = baliho, dadu Rezim 1+1
+    const r = act(s, "citra", { type: "end_turn" }, [9, 50, 1, 1]);
+    assert.equal(r.events.find((e) => e.type === "kebijakan")!.payload.id, "pajak_kekayaan");
+    assert.deepEqual(r.events.find((e) => e.type === "pajak_kekayaan")!.payload.daftar, [
+      { id: "budi", jumlah: 4.5 * JT },
+      { id: "citra", jumlah: 2 * JT },
+      { id: "andi", jumlah: 0.6 * JT },
+    ]);
+  });
+
   it("Semangat tinggi di akhir ronde: Rezim melempar Pengalihan Isu, lalu jeda beberapa ronde", () => {
     const s = setup(2);
     s.semangat = 80;
@@ -334,7 +380,9 @@ describe("dadu kendali, jurus, babak", () => {
     const members = IDS.map((id, i) => ({ id, name: id, seat: i, profession: "buruh" as Profession }));
     const s = createInitialState("room", "rakyat_bersatu", members, seededRng(1), 6);
     assert.equal(s.level, 6);
-    assert.equal(s.kekuasaanMaks, Math.round(R.KEKUASAAN_AWAL[4] * R.nyawaBabak(6)));
+    assert.equal(s.kekuasaanMaks, R.kekuasaanAwal(4, 6));
+    // makin ramai room-nya, makin tebal Rezimnya di babak yang sama
+    for (let b = 1; b <= R.MAX_BABAK; b++) for (let n = 3; n <= 6; n++) assert.ok(R.kekuasaanAwal(n, b) > R.kekuasaanAwal(n - 1, b));
     s.players.andi.position = 3;
     const r = act(s, "andi", { type: "roll" }, [1, 2]); // Potongan Gaji DR 1 jt
     assert.equal(r.state.players.andi.cuan, 20 * JT - R.bulat(JT * R.pungutanBabak(6)));

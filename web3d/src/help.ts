@@ -89,7 +89,15 @@ export interface Hadiah {
   emas: number;
   /** babak yang baru terbuka gara-gara kemenangan ini */
   babakBaru: number | null;
+  /** menang beruntun sampai permainan ini, dan Emas Antum bonusnya */
+  beruntun: number;
+  bonusBeruntun: number;
+  /** rentetan menang yang putus gara-gara kekalahan ini */
+  putus: number;
 }
+
+/** Bonus Emas Antum untuk kemenangan beruntun: +2 tiap kemenangan tambahan, paling banyak +10. */
+export const bonusBeruntun = (beruntun: number): number => Math.min(Math.max(0, beruntun - 1), 5) * 2;
 
 const STATS_KEY = "wkwk.stats";
 const KOSONG: Stats = { main: 0, menang: 0, streak: 0, rekor: null, babak: 1, bintang: {}, xp: 0, emas: 0 };
@@ -130,7 +138,11 @@ export function recordGame(o: {
     xp: 20 + (o.win ? 40 : 0) + bintang * 15 + Math.min(60, Math.round(o.jasa / 3)) + (o.mvp ? 20 : 0),
     emas: bintang * 5 + (pertama ? 15 : 0),
     babakBaru: null,
+    beruntun: o.win ? s.streak + 1 : 0,
+    bonusBeruntun: o.win ? bonusBeruntun(s.streak + 1) : 0,
+    putus: o.win ? 0 : s.streak,
   };
+  hadiah.emas += hadiah.bonusBeruntun;
   s.main += 1;
   s.xp += hadiah.xp;
   s.emas += hadiah.emas;

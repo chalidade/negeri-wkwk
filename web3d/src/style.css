@@ -474,3 +474,46 @@ label { font-size: 13px; font-weight: 700; color: var(--teks2); }
 @media (max-width: 360px) { .logo-img { max-width: 260px; } }
 @media (max-width: 340px) { .logo-img { max-width: 230px; } .stempel { font-size: 9px; } }
 .catatan a { color: inherit; font-weight: 800; }
+
+/* beranda: tiga pintu kecil (misi, toko, album) */
+.home .row.tiga { flex-wrap: nowrap; }
+.home .row.tiga .btn { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 1px; padding: 9px 4px 8px; font-size: 14px; line-height: 1.2; }
+.row.tiga .btn .ic { width: 24px; height: 24px; margin-bottom: 2px; }
+.row.tiga .btn small { font-size: 11.5px; font-weight: 700; color: var(--teks2); }
+
+/* bansos harian: 4 hari di atas, 2 hari + hari puncak di bawah */
+.bansos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.bansos .hari { display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--abu); border: 2px solid transparent; border-radius: 13px; padding: 8px 4px; font-weight: 800; font-size: 14px; text-align: center; line-height: 1.2; }
+.bansos .hari small { font-size: 11.5px; font-weight: 700; color: var(--teks2); }
+.bansos .hari .ic { width: 24px; height: 24px; }
+.bansos .hari.puncak { grid-column: span 2; background: #fff3c9; }
+.bansos .hari.sudah { opacity: .5; }
+.bansos .hari.kini { border-color: var(--ink); background: var(--kuning); animation: breathe 1.4s ease-in-out infinite; }
+
+/* stiker: kertas tempel dengan sudut sedikit miring, warna latar menandai kelangkaan */
+.stiker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.stiker-baris { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.stiker-baris .stiker { flex: 0 1 104px; }
+.stiker { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; background: #fff; border: var(--garis); border-radius: 14px; padding: 9px 5px 8px; line-height: 1.2; min-width: 0; }
+.stiker .gambar { width: 46px; height: 46px; display: grid; place-items: center; }
+.stiker .gambar > .ic { width: 46px; height: 46px; padding: 8px; border-radius: 50%; border: var(--garis); background: #fff3c9; }
+.stiker.sultan .gambar > .ic { background: #fff; }
+.stiker.kosong .gambar > .ic { background: #fff; }
+.stiker .gambar .ava { width: 44px; height: 44px; }
+.stiker b { font-size: 12.5px; font-weight: 800; }
+.stiker small { font-size: 10.5px; font-weight: 600; color: var(--teks2); }
+.stiker.langka { background: var(--langit); }
+.stiker.sultan { background: var(--kuning); }
+.stiker.kosong { background: var(--abu); border-style: dashed; border-color: #b9c1d3; }
+.stiker.kosong .gambar { opacity: .3; filter: grayscale(1); }
+.stiker.kosong b { color: var(--teks2); }
+.stiker .tanda { position: absolute; top: -8px; right: -6px; background: var(--merah); color: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 7px; font-size: 10.5px; font-weight: 800; transform: rotate(6deg); }
+.stiker.dobel .tanda { background: var(--paper); color: var(--ink); }
+.stiker.muncul { animation: tempel .5s cubic-bezier(.2,1.6,.4,1) backwards; }
+@keyframes tempel { from { transform: scale(.2) rotate(-18deg); opacity: 0; } }
+.btn.amplop { background: var(--kuning); animation: breathe 1.4s ease-in-out infinite; }
+.beruntun { display: flex; align-items: center; justify-content: center; gap: 5px; font-weight: 800; font-size: 14px; color: #a85b00; }
+.catatan.beruntun { display: block; opacity: 1; font-size: 12.5px; color: var(--ink); }
+@media (prefers-reduced-motion: reduce) {
+  .stiker.muncul, .btn.amplop, .bansos .hari.kini { animation: none; }
+}

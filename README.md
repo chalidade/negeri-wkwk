@@ -26,6 +26,9 @@ Main di browser: https://negeri-wkwk.vercel.app
 - **Aparat di Demo Akbar:** dua dadu menentukan hasilnya. 2 sampai 5 barikade jebol (pukulan 1,3x, Semangat tersisa 20), 6 sampai 8 massa ditahan (pukulan biasa), 9 sampai 12 dibubarkan gas air mata (pukulan 0,6x, satu warga diamankan).
 - **Kas Rezim:** semua pungutan dari warga terkumpul, lalu dihamburkan tiap kali penuh: studi banding, renovasi rumah dinas, baliho pencitraan (Kekuasaan naik), atau bayar buzzer (Semangat turun).
 - **Pengalihan Isu:** kalau Semangat 70 ke atas di akhir ronde, Rezim bisa melemparnya sebagai ganti Kebijakan. Dadu Nasib menentukan seberapa warga terkecoh.
+- **Diambil Alih Negara:** kartu Kebijakan yang mengincar usaha rakyat paling mahal. Dadu Nasib menentukan: batal karena ditolak warga, diambil dengan ganti rugi separuh nilai, atau diambil tanpa ganti rugi. Bangunannya utuh jadi aset Rezim.
+- **Pajak Orang Kaya:** warga diurutkan dari total harta (uang + nilai usaha). Yang terkaya bayar 15% uangnya, berikutnya 10%, lalu 6%, sisanya 3% (minimal DR 200 rb).
+- **Tingkat kesulitan:** nyawa Rezim diambil dari tabel per jumlah warga dan babak (`KEKUASAAN_BABAK` di `rules.ts`), disetel lewat simulasi bot. Makin ramai room-nya makin berat, dan tiap babak lebih berat dari sebelumnya.
 - **Buzzer memoles citra:** salah satu sabotase buzzer menaikkan kepercayaan publik (Kekuasaan Rezim).
 - **Mekanik bertahap:** babak 1 hanya dasar; pelicin dan aparat mulai babak 2, pinjol dan buzzer babak 3, anggaran dan pengalihan isu babak 4. Room online langsung memakai semua mekanik.
 - **Upgrade usaha:** mendarat di usaha sendiri langsung ditawari upgrade; bisa juga ketuk panah kuning di atas usaha, atau lewat tombol Aksi.
@@ -65,6 +68,9 @@ Tes database butuh PostgreSQL 15+ atau Docker: `npm run test:db`.
 
 - **Toko** (`web3d/src/toko.ts`): Emas Antum dibelanjakan untuk hiasan saja: warna kartu warga, warna mata dadu, bingkai avatar. Tidak memengaruhi peluang menang.
 - **Misi harian:** tiga misi berganti tiap hari, hadiahnya Emas Antum.
+- **Bansos harian:** hadiah masuk tiap hari dalam putaran 7 hari (5, 5, 8, 8, 10, 12, 25 emas; hari ke-7 ditambah satu amplop stiker). Bolong sehari, hitungan balik ke hari 1. Ditawarkan sekali tiap aplikasi dibuka setelah pemain pernah main.
+- **Album stiker:** 18 stiker di 3 halaman (Warga, Rezim, Perlawanan) dengan tiga kelangkaan. Tiap habis main dapat amplop: kalah 1, menang 2, bintang tiga 3. Stiker dobel ditukar emas, satu halaman lengkap +30 emas, album tamat +100 emas. Amplop juga bisa dibeli 20 emas.
+- **Menang beruntun:** tiap kemenangan beruntun menambah bonus 2 emas (paling banyak +10). Kalah, hitungannya putus.
 - **Musik latar:** gamelan kecil hasil sintesis di `web3d/src/sfx.ts`, tanpa berkas audio. Bisa dimatikan dari menu.
 
 ## Gaya visual

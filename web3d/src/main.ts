@@ -8,10 +8,10 @@ import { BACKEND, WEB_URL, diAplikasi } from "./config.ts";
 import { hasSoloSave, newSoloGame, resumeSoloGame, type Driver } from "./driver.ts";
 import { layarBareng } from "./online.ts";
 import { startGame } from "./game.ts";
-import { getStats, showHelp } from "./help.ts";
+import { bonusBeruntun, getStats, showHelp } from "./help.ts";
 import { ava, ic, rezimAva } from "./icons.ts";
 import { mulaiMusik, sfx } from "./sfx.ts";
-import { ringkasMisi, showMisi, showToko, terapkanKosmetik } from "./toko.ts";
+import { ringkasAlbum, ringkasMisi, showAlbum, showBansos, showMisi, showToko, statusBansos, terapkanKosmetik } from "./toko.ts";
 import {
   BABAK,
   JURUS,
@@ -153,6 +153,7 @@ function homeScreen(): void {
 
   const adaSimpanan = hasSoloSave();
   const misi = ringkasMisi();
+  const album = ringkasAlbum();
   show(
     h(
       "div",
@@ -199,12 +200,15 @@ function homeScreen(): void {
         adaSimpanan
           ? h("button", { class: "btn grey block", onclick: () => solo(false) }, ic("dadu"), `Mulai baru dari babak ${st.babak}`)
           : h("button", { class: "btn big red block", onclick: () => solo(false) }, ic("dadu"), "Main sekarang"),
-        h("div", { class: "catatan" }, "Solo bareng 3 warga bot. Bisa tanpa internet."),
+        st.streak >= 2
+          ? h("div", { class: "catatan beruntun" }, ic("petir"), ` Menang beruntun ${st.streak} kali. Menang lagi, +${bonusBeruntun(st.streak + 1)} emas.`)
+          : h("div", { class: "catatan" }, "Solo bareng 3 warga bot. Bisa tanpa internet."),
         h(
           "div",
-          { class: "row dua" },
-          h("button", { class: `btn grey${misi.adaHadiah ? " titik" : ""}`, onclick: () => showMisi(() => homeScreen()) }, ic("bintang"), `Misi ${misi.selesai}/${misi.total}`),
-          h("button", { class: "btn grey", onclick: () => showToko(() => homeScreen()) }, ic("koin"), `Toko, ${st.emas} emas`),
+          { class: "row tiga" },
+          h("button", { class: `btn grey${misi.adaHadiah ? " titik" : ""}`, onclick: () => showMisi(() => homeScreen()) }, ic("bintang"), h("b", {}, "Misi"), h("small", {}, `${misi.selesai} dari ${misi.total}`)),
+          h("button", { class: "btn grey", onclick: () => showToko(() => homeScreen()) }, ic("toko"), h("b", {}, "Toko"), h("small", {}, `${st.emas} emas`)),
+          h("button", { class: `btn grey${album.amplop > 0 ? " titik" : ""}`, onclick: () => showAlbum(() => homeScreen()) }, ic("kartu"), h("b", {}, "Album"), h("small", {}, `${album.punya} dari ${album.total}`)),
         ),
         h(
           "button",
@@ -222,6 +226,17 @@ function homeScreen(): void {
       ),
     ),
   );
+  tawarkanBansos();
+}
+
+/** Bansos harian ditawarkan sekali tiap aplikasi dibuka, dan baru setelah pemain pernah main. */
+let bansosDitawarkan = false;
+function tawarkanBansos(): void {
+  if (bansosDitawarkan || getStats().main < 1 || !statusBansos().bisa) return;
+  bansosDitawarkan = true;
+  setTimeout(() => {
+    if (!document.querySelector(".overlay") && document.querySelector(".screen.home")) showBansos(() => homeScreen());
+  }, 500);
 }
 
 // ------------------------------------------------------------------ mulai

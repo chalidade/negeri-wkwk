@@ -58,8 +58,6 @@ export const JURUS_DAMAGE = 7;
 
 // --- babak (tingkat kesulitan Rezim)
 export const MAX_BABAK = 10;
-/** Pengali nyawa Rezim per babak. */
-export const nyawaBabak = (level: number): number => 1 + 0.018 * (level - 1);
 /** Pengali pungutan Rezim per babak. */
 export const pungutanBabak = (level: number): number => 1 + 0.045 * (level - 1);
 
@@ -102,8 +100,23 @@ export const DENDA_TILANG = 800_000;
 export const MAX_DADU_KEMBAR = 3;
 
 // --- Rezim
-/** Nyawa Rezim tergantung jumlah warga: makin ramai, makin kuat Rezimnya. */
-export const KEKUASAAN_AWAL: Record<number, number> = { 2: 74, 3: 106, 4: 132, 5: 163, 6: 192 };
+/**
+ * Nyawa Rezim per jumlah warga (baris) dan babak 1..10 (kolom), disetel lewat simulasi bot
+ * supaya peluang menang turun mulus: 4 warga 64% di babak 1 sampai 14% di babak 10.
+ * Makin ramai room-nya makin berat (2 warga 70%, 6 warga 54% di babak 1).
+ * Angkanya turun dulu di babak 2-4 karena mekanik baru yang terbuka di sana
+ * (aparat, buzzer, anggaran) sudah menambah beban sendiri.
+ */
+export const KEKUASAAN_BABAK: Record<number, readonly number[]> = {
+  2: [70, 67, 60, 58, 59, 61, 66, 68, 71, 74],
+  3: [107, 105, 99, 96, 99, 101, 105, 107, 112, 115],
+  4: [143, 140, 136, 131, 134, 135, 139, 142, 149, 150],
+  5: [178, 176, 169, 164, 164, 165, 170, 175, 178, 182],
+  6: [213, 210, 209, 198, 199, 201, 207, 210, 217, 220],
+};
+/** Nyawa awal Rezim untuk jumlah warga dan babak tertentu. */
+export const kekuasaanAwal = (warga: number, babak: number): number =>
+  KEKUASAAN_BABAK[warga][Math.max(1, Math.min(MAX_BABAK, babak)) - 1];
 /** Kekuasaan tinggal separuh: Rezim panik, semua pungutan dikali PANIK_PENGALI. */
 export const PANIK_DI = 0.5;
 export const PANIK_PENGALI = 1.5;

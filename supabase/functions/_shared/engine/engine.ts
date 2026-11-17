@@ -97,7 +97,7 @@ export function createInitialState(
 
   const babak = Math.max(1, Math.min(R.MAX_BABAK, Math.round(level)));
   const adaBuzzer = lengkap || babak >= R.BABAK_FITUR.buzzer;
-  const nyawa = Math.round(R.KEKUASAAN_AWAL[sorted.length] * R.nyawaBabak(babak));
+  const nyawa = R.kekuasaanAwal(sorted.length, babak);
   return {
     schema: 3,
     roomId,

@@ -84,7 +84,13 @@ export function describe(e: GameEvent, s: GameState, me: string): string | null 
     case "rezim_caplok":
       return p.alasan === "gusur"
         ? `🚧 ${tile(p.tile)} milik ${name(p.dari)} digusur Rezim`
-        : `🏴 Rezim mencaplok ${tile(p.tile)}`;
+        : p.alasan === "ambil_alih"
+          ? `🏴 ${tile(p.tile)} milik ${name(p.dari)} diambil alih negara, ${Number(p.ganti) > 0 ? `ganti rugi ${dr(p.ganti)}` : "tanpa ganti rugi"}`
+          : `🏴 Rezim mencaplok ${tile(p.tile)}`;
+    case "pajak_kekayaan": {
+      const [atas] = p.daftar as { id: string; jumlah: number }[];
+      return atas ? `💰 Pajak Orang Kaya: ${name(atas.id)} paling tajir, bayar ${dr(atas.jumlah)}` : null;
+    }
     case "rezim_upgrade":
       return `🏴 Aset Rezim di ${tile(p.tile)} makin besar`;
     case "rezim_bayar":

@@ -89,6 +89,25 @@ function semuaBayar(ctx: Ctx, n: (id: string) => number): void {
   }
 }
 
+/** Nilai sebuah usaha: harga petak ditambah separuh harga untuk tiap tingkat upgrade. */
+const nilaiUsaha = (idx: number, level: number): number => (TILES[idx].price ?? 0) * (1 + 0.5 * level);
+
+/** Usaha rakyat yang paling bernilai diambil alih Rezim, bangunannya utuh. `ganti` = porsi ganti rugi. */
+function ambilAlih(ctx: Ctx, ganti: number): void {
+  const s = ctx.s;
+  let idx = -1;
+  s.tiles.forEach((t, i) => {
+    if (TILES[i].type !== "property" || !t.owner || !isRakyat(s, t.owner)) return;
+    if (idx < 0 || nilaiUsaha(i, t.level) > nilaiUsaha(idx, s.tiles[idx].level)) idx = i;
+  });
+  if (idx < 0) return semuaBayar(ctx, () => 0.5 * JT);
+  const dari = s.tiles[idx].owner!;
+  const bayar = ganti > 0 ? transfer(ctx, BANK, dari, R.bulat(nilaiUsaha(idx, s.tiles[idx].level) * ganti)) : 0;
+  s.tiles[idx].owner = GOV;
+  emit(ctx, { type: "rezim_caplok", payload: { tile: idx, dari, alasan: "ambil_alih", ganti: bayar } });
+  addSemangat(ctx, R.SEMANGAT_KEBIJAKAN * 2, "kebijakan");
+}
+
 export const NASIB_WNI: CardDef[] = [
   {
     id: "umkm_viral",
@@ -479,6 +498,37 @@ export const KEBIJAKAN: CardDef[] = [
       if (idx < 0) return semuaBayar(ctx, () => 0.5 * JT);
       ctx.s.tiles[idx] = { owner: GOV, level: 0 };
       emit(ctx, { type: "rezim_caplok", payload: { tile: idx, dari: null, alasan: "proyek" } });
+    },
+  },
+  {
+    id: "ambil_alih",
+    judul: "Diambil Alih Negara",
+    teks: "\"Demi kepentingan umum.\" Usaha warga yang paling mahal mau diambil alih. Lempar Dadu Nasib.",
+    baik: false,
+    meredam: true,
+    nasib: [
+      { teks: "Warga ramai-ramai menolak sampai batal. Semangat Demo naik.", apply: (ctx) => addSemangat(ctx, 8, "tolak_ambil_alih") },
+      { teks: "Diambil alih, pemiliknya dapat ganti rugi separuh harga.", apply: (ctx) => ambilAlih(ctx, 0.5) },
+      { teks: "Diambil alih tanpa ganti rugi sepeser pun.", apply: (ctx) => ambilAlih(ctx, 0) },
+    ],
+  },
+  {
+    id: "pajak_kekayaan",
+    judul: "Pajak Orang Kaya",
+    teks: "Makin tajir, makin besar pajaknya. Warga terkaya bayar 15% uangnya, berikutnya 10%, lalu 6%, sisanya 3%.",
+    baik: false,
+    apply(ctx) {
+      // peringkat dari total harta (uang + nilai usaha); pajaknya dihitung dari uang tunai
+      const harta = (id: string) =>
+        player(ctx.s, id).cuan + ctx.s.tiles.reduce((n, t, i) => n + (t.owner === id ? nilaiUsaha(i, t.level) : 0), 0);
+      const urut = [...alivePlayers(ctx.s)].sort((a, b) => harta(b.id) - harta(a.id));
+      const tarif = [0.15, 0.1, 0.06];
+      const daftar: { id: string; jumlah: number }[] = [];
+      urut.forEach((p, i) => {
+        if (ctx.s.phase === "game_over") return;
+        daftar.push({ id: p.id, jumlah: pungut(ctx, p.id, Math.max(0.2 * JT, p.cuan * (tarif[i] ?? 0.03))) });
+      });
+      emit(ctx, { type: "pajak_kekayaan", payload: { daftar } });
     },
   },
   {
