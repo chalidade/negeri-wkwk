@@ -141,6 +141,7 @@ export function layarBareng(ctx: KonteksOnline, kodeAwal?: string): void {
           h("button", { class: "btn grey block", onclick: () => gabungLokal() }, ic("kartu"), "Pindai QR tuan rumah (tanpa internet)"),
         ),
         h("div", { class: "panel col" }, h("div", { class: "sheet-title" }, ic("suara"), "Room terbuka"), daftar),
+        h("button", { class: "btn grey block", onclick: () => tesLayar() }, ic("kaca"), "Tes sambungan internet"),
       ),
     ),
   );
@@ -168,6 +169,51 @@ export function layarBareng(ctx: KonteksOnline, kodeAwal?: string): void {
   })
     .then((stop) => (mati ? stop() : (berhenti = stop)))
     .catch(() => daftar.replaceChildren(h("div", { class: "muted" }, "Daftar room tidak bisa dimuat. Masih bisa gabung pakai kode.")));
+}
+
+// ------------------------------------------------------------------ tes sambungan
+
+/** Periksa server penghubung dari HP ini, supaya ketahuan kenapa teman tidak bisa tersambung. */
+function tesLayar(): void {
+  sfx.click();
+  const daftar = h("div", { class: "col", style: "gap:7px" });
+  const simpul = h("div", { class: "muted" }, "Memeriksa, paling lama 12 detik…");
+  const close = modal(
+    h(
+      "div",
+      { class: "sheet col", style: "gap:10px" },
+      h("div", { class: "sheet-title" }, ic("kaca"), "Tes sambungan"),
+      daftar,
+      simpul,
+      h("button", { class: "btn grey", onclick: () => close() }, "Tutup"),
+    ),
+  );
+  void import("./tes.ts")
+    .then(({ tesSambungan }) =>
+      tesSambungan((baris) => {
+        daftar.replaceChildren(
+          ...baris.map((b) =>
+            h(
+              "div",
+              { class: "arow", style: "cursor:default" },
+              h("span", { class: "a-icon" }, ic(b.ok === null ? "riwayat" : b.ok ? "centang" : "silang")),
+              h("span", { class: "a-main" }, h("b", {}, b.nama), h("small", {}, b.ket)),
+            ),
+          ),
+        );
+        if (baris.some((b) => b.ok === null)) return;
+        const server = baris.slice(0, -1);
+        const main = baris[baris.length - 1];
+        simpul.textContent = main.ok
+          ? server.every((b) => b.ok)
+            ? "Sambungan lancar. HP ini bisa main bareng lewat internet."
+            : "Bisa main bareng. Ada server yang tidak terjangkau, tapi server lain menggantikannya."
+          : server.some((b) => b.ok)
+            ? "Server terjangkau, tapi pesan antar pemain tidak sampai. Coba lagi sebentar lagi."
+            : "Tidak ada server penghubung yang terjangkau dari jaringan ini. Coba ganti jaringan (data seluler atau Wi-Fi lain).";
+      }),
+    )
+    .catch(() => (simpul.textContent = "Tes tidak bisa dijalankan. Cek internetmu."));
 }
 
 // ------------------------------------------------------------------ tuan rumah
