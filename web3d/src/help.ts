@@ -1,22 +1,24 @@
 // "Cara Main": lima kartu singkat. Muncul otomatis di game pertama.
 import { h, modal } from "./dom.ts";
+import { ic, rezimAva } from "./icons.ts";
 import { sfx } from "./sfx.ts";
 
 const SLIDES: [string, string, string][] = [
-  ["🎯", "Tumbangkan Rezim", "Semua warga satu tim. Habiskan ❤️ Kekuasaan Rezim sebelum Pemilu di ronde 20. Kalau telat, Rezim menang lagi."],
-  ["🎲", "Tahan dadu, atur tenaga", "Tahan tombol dadu, lalu lepas di Pelan, Sedang, atau Kencang. Petak yang menyala itu tempat kamu bisa mendarat: incar usaha kosong, hindari pungli."],
-  ["🏪", "Cari duit dulu", "Beli usaha. Tiap lewat petak Gajian kamu dapat gaji + omzet dari semua usahamu."],
-  ["✊", "Isi Semangat Demo", "Beli usaha, bikin petisi, bahkan kena pungli bikin warga makin marah. Meter penuh = DEMO AKBAR dan Kekuasaan Rezim rontok."],
-  ["⚡", "Jurus profesi", "Tiap profesi punya jurus pamungkas yang terisi tiap beberapa giliran. Pakai di saat yang pas, lalu rebut gelar MVP."],
-  ["🚘", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan ngawur, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
-  ["🎴", "Dadu Nasib", "Sebagian kartu dan bencana ditentukan lemparan dadu: angka kecil mujur, angka besar apes. Kamu sendiri yang melempar."],
-  ["🕵️", "Awas buzzer", "Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer menyabotase tiap ronde tanpa nama. Jejak digital sering mengarah ke dia, tapi kadang dipalsukan buat memfitnah. Kalau curiga, panggil Sidang Warga lewat ⚡ Aksi: semua memilih, suara terbanyak diusir. Salah usir, hartanya disita Rezim."],
-  ["🤝", "Resmi atau pelicin", "Buka dan upgrade usaha lewat jalur resmi itu aman tapi mahal. Uang pelicin lebih murah, tapi 1 dari 4 kena OTT (denda dan ditahan), dan tiap suap bikin Rezim pulih."],
-  ["💸", "Pinjol dan gotong royong", "Kepepet? Pinjol cair seketika, tapi bunganya 20% di depan dan 10% tiap ronde. Warga lain bisa bantu melunasi lewat ⚡ Aksi → Bantu warga."],
-  ["🌾", "Saling jaga", "Lumbung Bersama otomatis menalangi warga yang nggak sanggup bayar. Kalau 2 warga bangkrut, semua kalah."],
+  ["rezim", "Tumbangkan Rezim", "Semua warga satu tim. Habiskan Kekuasaan Rezim (batang merah di atas) sebelum Pemilu di ronde 20. Kalau telat, Rezim menang lagi."],
+  ["dadu", "Tahan dadu, atur tenaga", "Tahan tombol dadu, lalu lepas di Pelan, Sedang, atau Kencang. Petak yang menyala itu tempat kamu bisa mendarat: incar usaha kosong, hindari pungli."],
+  ["toko", "Cari duit dulu", "Beli usaha. Tiap lewat petak Gajian kamu dapat gaji ditambah omzet semua usahamu."],
+  ["naik", "Upgrade usaha", "Mendarat lagi di usahamu sendiri, kamu langsung ditawari upgrade. Bisa juga ketuk panah kuning yang melayang di atas usahamu, kapan saja di giliranmu."],
+  ["toa", "Isi Semangat Demo", "Beli usaha, bikin petisi, bahkan kena pungli bikin warga makin marah. Massa berkumpul di depan Istana. Batang kuning penuh berarti Demo Akbar, dan Kekuasaan Rezim rontok."],
+  ["petir", "Jurus profesi", "Tiap profesi punya jurus pamungkas yang terisi tiap beberapa giliran. Pakai lewat tombol Aksi di saat yang pas, lalu rebut gelar MVP."],
+  ["mobil", "Awas mobil pejabat", "Tiap akhir ronde Rezim bikin kebijakan ngawur, lalu mobilnya mencaplok petak kosong. Tapi kalau mampir ke usahamu, dia yang bayar dan Kekuasaannya turun."],
+  ["kartu", "Dadu Nasib", "Sebagian kartu dan bencana ditentukan lemparan dadu: angka kecil mujur, angka besar apes. Kamu sendiri yang melempar."],
+  ["kaca", "Awas buzzer", "Rezim bisa menyuap warga yang kepepet kapan saja. Buzzer main seperti warga biasa, tapi diam-diam menyabotase. Jejak digital sering mengarah ke dia, tapi bisa dipalsukan. Kalau curiga, panggil Sidang Warga lewat tombol Aksi: semua memilih, suara terbanyak diusir. Salah usir, hartanya disita Rezim."],
+  ["tangan", "Resmi atau pelicin", "Buka dan upgrade usaha lewat jalur resmi itu aman tapi mahal. Uang pelicin lebih murah, tapi 1 dari 4 kena OTT (denda dan ditahan), dan tiap suap bikin Rezim pulih."],
+  ["pinjol", "Pinjol dan gotong royong", "Kepepet? Pinjol cair seketika, tapi bunganya 20% di depan dan 10% tiap ronde. Warga lain bisa bantu melunasi lewat tombol Aksi."],
+  ["karung", "Saling jaga", "Lumbung Bersama otomatis menalangi warga yang nggak sanggup bayar. Kalau 2 warga bangkrut, semua kalah."],
 ];
 
-export const HELP_SEEN = "wkwk.help.v3";
+export const HELP_SEEN = "wkwk.help.v4";
 
 export function showHelp(onDone?: () => void): void {
   let i = 0;
@@ -26,12 +28,12 @@ export function showHelp(onDone?: () => void): void {
   const dots = h("div", { class: "dots" });
   const next = h("button", { class: "btn" });
   const render = () => {
-    const [ic, t, body] = SLIDES[i];
-    icon.textContent = ic;
+    const [ikon, t, body] = SLIDES[i];
+    icon.replaceChildren(ikon === "rezim" ? rezimAva() : ic(ikon));
     title.textContent = t;
     text.textContent = body;
     dots.replaceChildren(...SLIDES.map((_, k) => h("i", { class: k === i ? "on" : "" })));
-    next.textContent = i === SLIDES.length - 1 ? "Gas Main! 🎲" : "Lanjut ▶";
+    next.textContent = i === SLIDES.length - 1 ? "Gas main" : "Lanjut";
   };
   next.onclick = () => {
     sfx.click();

@@ -1,22 +1,21 @@
-import "@fontsource/lilita-one";
-import "@fontsource/nunito/600.css";
-import "@fontsource/nunito/800.css";
-import "@fontsource/nunito/900.css";
+import "@fontsource/bagel-fat-one/latin.css";
+import "@fontsource/plus-jakarta-sans/latin-600.css";
+import "@fontsource/plus-jakarta-sans/latin-700.css";
+import "@fontsource/plus-jakarta-sans/latin-800.css";
 import "./style.css";
 import { ApiError, api, getGame, getMembers, getRoom, subscribeRoom, supabase } from "./api.ts";
 import { confirmBox, h, sceneEl, toast, ui } from "./dom.ts";
 import { hasSoloSave, newSoloGame, onlineGame, resumeSoloGame, type Driver } from "./driver.ts";
 import { startGame } from "./game.ts";
 import { getStats, showHelp } from "./help.ts";
+import { ava, ic, rezimAva } from "./icons.ts";
 import { sfx } from "./sfx.ts";
 import {
   BABAK,
   JURUS,
   PROFESSIONS,
-  PROFESSION_EMOJI,
   PROFESSION_LABEL,
   PROFESSION_SKILL,
-  colorForSeat,
   pangkat,
   type Mode,
   type Profession,
@@ -45,43 +44,44 @@ function runGame(driver: Driver, onReplay?: (level: number) => void): void {
   cleanup = startGame(driver, { onExit: () => homeScreen(), onReplay });
 }
 
-const logo = () =>
-  h(
-    "div",
-    { class: "logo" },
-    h("div", { class: "logo-top" }, "NEGERI"),
-    h("div", { class: "logo-main" }, "WKWK"),
-    h("div", { class: "logo-tag" }, "Monopoli rakyat lawan Rezim"),
-  );
-
 // ------------------------------------------------------------------ beranda
 
+/** Beranda: kartu warga (nama, pekerjaan, pangkat) jadi pusatnya, lalu lawan dan tombol main. */
 function homeScreen(): void {
-  const name = h("input", { placeholder: "Nama kamu, misal: Budi Sabar", maxLength: 24, value: savedName() });
+  const st = getStats();
+  const pk = pangkat(st.xp);
+  const name = h("input", { placeholder: "Tulis namamu", maxLength: 24, value: savedName(), "aria-label": "Nama warga" });
   name.addEventListener("input", () => localStorage.setItem(NAME_KEY, name.value.trim()));
   let prof = savedProf() ?? "buruh";
+  const foto = h("div", { class: "ktp-photo" });
+  const kerja = h("dd", {});
   const skill = h("div", { class: "skill" });
-  const profBtns = PROFESSIONS.map((p) =>
+  const profBtns = PROFESSIONS.map((p, i) =>
     h(
       "button",
       {
         class: "prof",
+        "aria-label": PROFESSION_LABEL[p],
         onclick: () => {
+          if (prof === p) return;
           prof = p;
           localStorage.setItem(PROF_KEY, p);
           sfx.click();
-          paint();
+          paint(true);
         },
       },
-      h("span", { class: "prof-emoji" }, PROFESSION_EMOJI[p]),
-      h("span", {}, PROFESSION_LABEL[p]),
+      ava(p, i),
     ),
   );
-  const paint = () => {
+  const paint = (ganti = false) => {
     profBtns.forEach((b, i) => b.classList.toggle("on", PROFESSIONS[i] === prof));
+    const pasFoto = ava(prof, 0, ganti ? "ganti" : "");
+    pasFoto.style.background = "#e5432f"; // latar pas foto merah, seperti di kartu sungguhan
+    foto.replaceChildren(pasFoto, h("span", { class: "stempel" }, pk.nama));
+    kerja.textContent = PROFESSION_LABEL[prof];
     skill.replaceChildren(
-      h("div", {}, `Keahlian: ${PROFESSION_SKILL[prof]}`),
-      h("div", {}, `⚡ Jurus ${JURUS[prof].nama}: ${JURUS[prof].efek}.`),
+      h("div", {}, PROFESSION_SKILL[prof]),
+      h("div", {}, ic("petir"), h("b", {}, ` Jurus ${JURUS[prof].nama}: `), `${JURUS[prof].efek}.`),
     );
   };
   paint();
@@ -102,22 +102,18 @@ function homeScreen(): void {
     if (saved) runGame(saved, again);
     else again(babak);
   };
-  const st = getStats();
-  const pk = pangkat(st.xp);
 
   // Tangga babak: tiap menang, Rezim berikutnya terbuka.
   let babak = st.babak;
-  const babakBox = h("div", { class: "babak-mid" });
-  const prev = h("button", { class: "icon", onclick: () => geser(-1) }, "◀");
-  const next = h("button", { class: "icon", onclick: () => geser(1) }, "▶");
+  const lawanMid = h("div", { class: "lawan-mid" });
+  const prev = h("button", { class: "icon", "aria-label": "Babak sebelumnya", onclick: () => geser(-1) }, ic("kiri"));
+  const next = h("button", { class: "icon", "aria-label": "Babak berikutnya", onclick: () => geser(1) }, ic("kanan"));
   const paintBabak = () => {
-    const b = BABAK[babak - 1];
     const bintang = st.bintang[babak] ?? 0;
-    babakBox.replaceChildren(
-      h("div", { class: "babak-emoji" }, b.emoji),
-      h("label", {}, `Babak ${babak} dari ${BABAK.length}`),
-      h("div", { class: "babak-nama" }, b.nama),
-      h("div", { class: "stars mini" }, ...[1, 2, 3].map((i) => h("span", { class: i <= bintang ? "on" : "" }, "★"))),
+    lawanMid.replaceChildren(
+      h("small", {}, `Lawan babak ${babak} dari ${BABAK.length}`),
+      h("b", {}, BABAK[babak - 1].nama),
+      h("div", { class: "stars mini" }, ...[1, 2, 3].map((i) => ic("bintang", i <= bintang ? "on" : ""))),
     );
     prev.disabled = babak <= 1;
     next.disabled = babak >= st.babak;
@@ -129,51 +125,67 @@ function homeScreen(): void {
   };
   paintBabak();
 
+  const adaSimpanan = hasSoloSave();
   show(
     h(
       "div",
-      { class: "screen" },
+      { class: "screen home" },
       h(
         "div",
         { class: "col" },
-        logo(),
         h(
           "div",
-          { class: "statline" },
-          h("div", {}, `🎖️ ${pk.nama}  ·  🪙 ${st.emas} Emas Antum${st.streak > 1 ? `  ·  🔥 ${st.streak} beruntun` : ""}`),
-          h("div", { class: "xpbar thin" }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` })),
+          { class: "home-top" },
+          h("div", {}, h("div", { class: "wordmark" }, h("small", {}, "NEGERI"), h("b", {}, "WKWK")), h("div", { class: "tagline" }, "Monopoli rakyat lawan Rezim")),
+          h("button", { class: "icon", "aria-label": "Cara main", onclick: () => showHelp() }, ic("tanya")),
         ),
-        h("div", { class: "panel babak" }, prev, babakBox, next),
         h(
           "div",
-          { class: "panel col" },
-          h("label", {}, "Nama warga"),
-          name,
-          h("label", {}, "Pilih profesi"),
-          h("div", { class: "profs" }, ...profBtns),
-          skill,
-        ),
-        hasSoloSave() ? h("button", { class: "btn big green block", onclick: () => solo(true) }, "▶ Lanjutkan Permainan") : null,
-        h("button", { class: "btn big block", onclick: () => solo(false) }, hasSoloSave() ? `🎲 Mulai Baru: Babak ${st.babak}` : "🎲 MAIN SEKARANG"),
-        h("div", { class: "muted center" }, "Solo: kamu + 3 warga bot melawan Rezim. Langsung main, tanpa internet."),
-        h(
-          "div",
-          { class: "row" },
+          { class: "ktp" },
+          h("div", { class: "ktp-head" }, h("i", { class: "ktp-flag" }), h("span", {}, "Kartu Warga"), h("span", {}, `No. ${String(st.main + 1).padStart(5, "0")}`)),
           h(
-            "button",
-            {
-              class: "btn blue",
-              style: "flex:1",
-              onclick: async () => {
-                const n = needName();
-                if (n && (await ensureSignedIn(n))) void onlineScreen();
-              },
-            },
-            "👥 Main Bareng Teman",
+            "div",
+            { class: "ktp-body" },
+            h(
+              "dl",
+              { class: "ktp-fields" },
+              h("dt", {}, "Nama"),
+              h("dd", {}, name),
+              h("dt", {}, "Pekerjaan"),
+              kerja,
+              h("dt", {}, "Menang"),
+              h("dd", {}, st.main > 0 ? `${st.menang} dari ${st.main} main` : "belum main"),
+              h("dt", {}, "Emas Antum"),
+              h("dd", {}, String(st.emas)),
+              h("dt", {}, "Berlaku"),
+              h("dd", {}, "selama sabar"),
+            ),
+            foto,
           ),
-          h("button", { class: "btn grey", onclick: () => showHelp() }, "❓ Cara Main"),
+          h("div", { class: "ktp-xp", title: pk.berikut ? `Menuju ${pk.berikut}` : pk.nama }, h("i", { style: `width:${Math.round(pk.maju * 100)}%` })),
         ),
-        h("div", { class: "muted center small" }, "Game satire fiksi. Tidak mewakili lembaga, partai, atau tokoh nyata."),
+        h("div", { class: "pilih" }, "Pilih pekerjaanmu"),
+        h("div", { class: "profs" }, ...profBtns),
+        skill,
+        h("div", { class: "lawan" }, rezimAva(), lawanMid, prev, next),
+        adaSimpanan ? h("button", { class: "btn big green block", onclick: () => solo(true) }, ic("main"), "Lanjutkan permainan") : null,
+        adaSimpanan
+          ? h("button", { class: "btn grey block", onclick: () => solo(false) }, ic("dadu"), `Mulai baru dari babak ${st.babak}`)
+          : h("button", { class: "btn big red block", onclick: () => solo(false) }, ic("dadu"), "Main sekarang"),
+        h("div", { class: "catatan" }, "Solo bareng 3 warga bot. Bisa tanpa internet."),
+        h(
+          "button",
+          {
+            class: "btn grey block",
+            onclick: async () => {
+              const n = needName();
+              if (n && (await ensureSignedIn(n))) void onlineScreen();
+            },
+          },
+          ic("warga"),
+          "Main bareng teman",
+        ),
+        h("div", { class: "catatan small" }, "Game satire fiksi. Tidak mewakili lembaga, partai, atau tokoh nyata."),
       ),
     ),
   );
@@ -211,8 +223,8 @@ async function enterRoom(roomId: string): Promise<void> {
 
 async function onlineScreen(): Promise<void> {
   let mode: Mode = "rakyat_bersatu";
-  const segA = h("button", {}, "✊ Rakyat Bersatu");
-  const segB = h("button", {}, "💰 Juragan");
+  const segA = h("button", {}, "Rakyat Bersatu");
+  const segB = h("button", {}, "Juragan");
   const modeHint = h("div", { class: "muted" });
   const setMode = (m: Mode) => {
     mode = m;
@@ -247,15 +259,15 @@ async function onlineScreen(): Promise<void> {
       h(
         "div",
         { class: "col" },
-        h("div", { class: "row" }, h("button", { class: "icon", onclick: () => homeScreen() }, "←"), h("div", { class: "h1" }, "Main Bareng Teman")),
-        last ? h("button", { class: "btn green block", onclick: () => void lobbyScreen(last) }, "▶ Lanjutkan room terakhir") : null,
+        h("div", { class: "row" }, h("button", { class: "icon", "aria-label": "Kembali", onclick: () => homeScreen() }, ic("kiri")), h("div", { class: "h1" }, "Main Bareng Teman")),
+        last ? h("button", { class: "btn green block", onclick: () => void lobbyScreen(last) }, ic("main"), "Lanjutkan room terakhir") : null,
         h(
           "div",
           { class: "panel col" },
           h("label", {}, "Bikin room baru"),
           h("div", { class: "seg" }, segA, segB),
           modeHint,
-          h("button", { class: "btn block", onclick: () => go(async () => (await api.createRoom(mode, prof)).roomId) }, "➕ Bikin Room"),
+          h("button", { class: "btn block", onclick: () => go(async () => (await api.createRoom(mode, prof)).roomId) }, ic("tambah"), "Bikin room"),
         ),
         h(
           "div",
@@ -292,7 +304,8 @@ async function onlineScreen(): Promise<void> {
                 homeScreen();
               },
             },
-            "🚪 Keluar akun",
+            ic("keluar"),
+            "Keluar akun",
           ),
           h(
             "button",
@@ -310,7 +323,7 @@ async function onlineScreen(): Promise<void> {
                 }
               },
             },
-            "🗑️ Hapus akun",
+            "Hapus akun",
           ),
         ),
       ),
@@ -332,8 +345,8 @@ async function lobbyScreen(roomId: string): Promise<void> {
   const host = room.host_id === me;
   const list = h("div", { class: "col", style: "gap:8px" });
   const counter = h("label", {});
-  const startBtn = h("button", { class: "btn big block" }, "🚀 Mulai Permainan");
-  const addBotBtn = h("button", { class: "btn blue block" }, "🤖 Tambah Bot");
+  const startBtn = h("button", { class: "btn big red block" }, "Mulai permainan");
+  const addBotBtn = h("button", { class: "btn grey block" }, ic("robot"), "Tambah bot");
 
   const renderMembers = async () => {
     const members = await getMembers(roomId);
@@ -343,14 +356,14 @@ async function lobbyScreen(roomId: string): Promise<void> {
         h(
           "div",
           { class: "member" },
-          h("div", { class: "ava", style: `background:${colorForSeat(m.seat)}` }, PROFESSION_EMOJI[m.profession ?? ""] ?? "🎲"),
+          ava(m.profession, m.seat),
           h(
             "div",
             { style: "flex:1" },
-            h("b", {}, `${m.is_bot ? "🤖 " : ""}${m.display_name}`),
+            h("b", {}, m.is_bot ? ic("robot") : null, m.is_bot ? ` ${m.display_name}` : m.display_name),
             h("div", { class: "muted" }, m.profession ? PROFESSION_LABEL[m.profession] : "Profesi acak"),
           ),
-          m.user_id === room.host_id ? h("span", { class: "tag", style: "background:#ffb300" }, "👑 Host") : null,
+          m.user_id === room.host_id ? h("span", { class: "tag", style: "background:var(--ink)" }, ic("mahkota"), "Host") : null,
           m.is_bot && host
             ? h(
                 "button",
@@ -361,14 +374,14 @@ async function lobbyScreen(roomId: string): Promise<void> {
                     await renderMembers();
                   },
                 },
-                "✕",
+                ic("silang"),
               )
             : null,
         ),
       ),
     );
     startBtn.disabled = members.length < 2;
-    startBtn.textContent = members.length < 2 ? "Tunggu teman, atau tambah bot" : "🚀 Mulai Permainan";
+    startBtn.textContent = members.length < 2 ? "Tunggu teman, atau tambah bot" : "Mulai permainan";
     addBotBtn.style.display = members.length >= room.max_players ? "none" : "";
   };
 
@@ -396,7 +409,7 @@ async function lobbyScreen(roomId: string): Promise<void> {
       h(
         "div",
         { class: "col" },
-        h("div", { class: "row" }, h("button", { class: "icon", onclick: () => void onlineScreen() }, "←"), h("div", { class: "h1" }, "Ruang Tunggu")),
+        h("div", { class: "row" }, h("button", { class: "icon", "aria-label": "Kembali", onclick: () => void onlineScreen() }, ic("kiri")), h("div", { class: "h1" }, "Ruang Tunggu")),
         h(
           "div",
           { class: "panel col center" },
@@ -410,12 +423,12 @@ async function lobbyScreen(roomId: string): Promise<void> {
             room.code,
           ),
           h("div", { class: "muted" }, "Ketuk kode untuk menyalin, lalu kirim ke teman."),
-          h("div", {}, room.mode === "rakyat_bersatu" ? "Mode: ✊ Rakyat Bersatu" : "Mode: 💰 Juragan"),
+          h("div", {}, room.mode === "rakyat_bersatu" ? "Mode Rakyat Bersatu" : "Mode Juragan"),
         ),
         counter,
         list,
         host ? addBotBtn : null,
-        host ? startBtn : h("div", { class: "panel center" }, "⏳ Menunggu host memulai…"),
+        host ? startBtn : h("div", { class: "panel center" }, "Menunggu host memulai…"),
       ),
     ),
   );
@@ -431,8 +444,9 @@ async function lobbyScreen(roomId: string): Promise<void> {
 
 async function boot(): Promise<void> {
   await Promise.all([
-    document.fonts.load('40px "Lilita One"'),
-    document.fonts.load('800 16px Nunito'),
+    document.fonts.load('40px "Bagel Fat One"'),
+    document.fonts.load('800 16px "Plus Jakarta Sans"'),
+    document.fonts.load('600 16px "Plus Jakarta Sans"'),
   ]).catch(() => undefined);
   homeScreen();
 }

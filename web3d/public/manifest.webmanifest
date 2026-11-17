@@ -5,7 +5,7 @@
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "portrait",
-  "background_color": "#1e9bf0",
-  "theme_color": "#1e9bf0",
+  "background_color": "#ffc83d",
+  "theme_color": "#ffc83d",
   "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

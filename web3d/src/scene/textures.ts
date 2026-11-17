@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { GROUP_COLOR, TILE_ICON, drPendek, type TileDef } from "../shared.ts";
 
-const DISPLAY = '"Lilita One", "Arial Black", sans-serif';
+const DISPLAY = '"Bagel Fat One", "Arial Black", sans-serif';
 const EMOJI = '"Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", sans-serif';
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
@@ -163,5 +163,44 @@ export function labelTexture(text: string, color: string): THREE.CanvasTexture {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, 160, 43, 280);
+  return toTexture(c);
+}
+
+/** Penanda "bisa di-upgrade" yang melayang di atas usaha: lingkaran kuning berpanah naik. */
+export function markerTexture(): THREE.CanvasTexture {
+  const [c, ctx] = canvas(128, 128);
+  ctx.fillStyle = "#ffc83d";
+  ctx.strokeStyle = "#1b2440";
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.arc(64, 64, 52, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 13;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(64, 92);
+  ctx.lineTo(64, 40);
+  ctx.moveTo(40, 62);
+  ctx.lineTo(64, 38);
+  ctx.lineTo(88, 62);
+  ctx.stroke();
+  return toTexture(c);
+}
+
+/** Spanduk demo: kain putih bergaris tinta dengan tulisan merah. */
+export function spandukTexture(text: string): THREE.CanvasTexture {
+  const [c, ctx] = canvas(512, 112);
+  ctx.fillStyle = "#fffdf7";
+  ctx.fillRect(0, 0, 512, 112);
+  ctx.strokeStyle = "#1b2440";
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, 502, 102);
+  ctx.fillStyle = "#e5432f";
+  ctx.font = `58px ${DISPLAY}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 256, 60, 470);
   return toTexture(c);
 }

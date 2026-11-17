@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { GOV, TILES, colorForSeat, type GameState, type TileState } from "../shared.ts";
 import { BOARD, CELL, TOP, tileCell, tileXZ } from "./layout.ts";
 import { makeBuilding, makeCar, makeCloud, makeIstana, makePawn, makeTree, type Istana } from "./models.ts";
-import { labelTexture, lawnTexture, skyTexture, tileTexture } from "./textures.ts";
+import { labelTexture, lawnTexture, markerTexture, skyTexture, spandukTexture, tileTexture } from "./textures.ts";
 
 interface PawnView {
   group: THREE.Group;
@@ -30,16 +30,30 @@ interface Particle {
   grav: number;
 }
 
-export type BurstKind = "spark" | "dust" | "smoke" | "coins" | "confetti" | "debris";
+export type BurstKind = "spark" | "dust" | "smoke" | "coins" | "confetti" | "debris" | "flare";
 const BURST: Record<BurstKind, { n: number; colors: string[]; speed: number; up: number; size: number; life: number; grav: number }> = {
   spark: { n: 26, colors: ["#ffe14d", "#fff7c2", "#ffb300"], speed: 2.6, up: 5.5, size: 0.16, life: 0.9, grav: 9 },
   dust: { n: 20, colors: ["#e8dcc0", "#cbbd9c", "#f6ecd2"], speed: 2.2, up: 1.8, size: 0.26, life: 0.9, grav: 1.5 },
   smoke: { n: 22, colors: ["#3a3f4b", "#5a6170", "#22252b"], speed: 1.4, up: 3.2, size: 0.32, life: 1.3, grav: -1 },
   coins: { n: 22, colors: ["#ffd24a", "#ffb300", "#fff2a8"], speed: 1.8, up: 7, size: 0.18, life: 1.1, grav: 12 },
   confetti: { n: 46, colors: ["#ff4d5e", "#ffd84d", "#22c06b", "#2f8bff", "#a35cf0", "#ffffff"], speed: 4.2, up: 7.5, size: 0.17, life: 1.6, grav: 7 },
+  flare: { n: 16, colors: ["#ff3b4e", "#ff8a5c", "#ffd84d", "#ffffff"], speed: 0.9, up: 4.6, size: 0.3, life: 1.5, grav: -1.2 },
   debris: { n: 30, colors: ["#fbfbf6", "#d9d2c0", "#b3261e", "#8d8676"], speed: 4.5, up: 6, size: 0.22, life: 1.2, grav: 11 },
 };
-const MAX_PARTICLES = 420;
+const MAX_PARTICLES = 520;
+/** jumlah demonstran saat Semangat Demo penuh */
+const CROWD_N = 110;
+
+interface Demonstran {
+  /** tempat berdiri di depan Istana */
+  x: number; z: number;
+  /** titik masuk dari tepi papan */
+  sx: number; sz: number;
+  /** fase lompatan dan kecepatan lari, supaya tidak seragam */
+  p: number; r: number;
+  /** 0 = belum datang, 1 = sudah di tempat (negatif = masih antre masuk) */
+  k: number;
+}
 
 const PITCH = (52 * Math.PI) / 180;
 const CAM_DIR = new THREE.Vector3(0, Math.sin(PITCH), Math.cos(PITCH));
@@ -83,7 +97,15 @@ export class GameScene {
   private tilt = 0;
   private panik = false;
   private crowd: THREE.InstancedMesh;
-  private crowdSeeds: { x: number; z: number; p: number }[] = [];
+  private heads!: THREE.InstancedMesh;
+  private massa: Demonstran[] = [];
+  private massaTarget = 0;
+  private energi = 0.2;
+  private energiGoal = 0.2;
+  private demoUntil = 0;
+  private spanduk: THREE.Mesh[] = [];
+  private markers = new Map<number, THREE.Sprite>();
+  private markerMat: THREE.SpriteMaterial | null = null;
   private clouds: THREE.Group[] = [];
   private trees: THREE.Group[] = [];
   private signs!: THREE.InstancedMesh;
@@ -147,34 +169,66 @@ export class GameScene {
     this.scene.add(this.car);
     this.placeCar(this.carTile);
 
-    // massa demo: muncul hanya saat Demo Akbar
-    const N = 150;
+    // Massa demo: berkumpul di depan Istana, makin ramai seiring Semangat Demo.
+    const calon: { x: number; z: number; d: number }[] = [];
+    for (let r = 0; r < 7; r++) {
+      for (let x = -6.2 + (r % 2) * 0.27; x <= 6.2; x += 0.54) {
+        const z = 2.5 + r * 0.56;
+        calon.push({ x: x + (Math.random() - 0.5) * 0.2, z: z + (Math.random() - 0.5) * 0.2, d: (x * 0.6) ** 2 + (z - 2.1) ** 2 });
+      }
+    }
+    calon.sort((a, b) => a.d - b.d);
+    this.massa = calon.slice(0, CROWD_N).map((c) => {
+      const samping = Math.abs(c.x) > 3.4 && Math.random() < 0.6;
+      return {
+        x: c.x, z: c.z,
+        sx: samping ? Math.sign(c.x) * 7.5 : c.x + (Math.random() - 0.5) * 3,
+        sz: samping ? c.z + (Math.random() - 0.5) * 2 : 7.5,
+        p: Math.random() * 6.28, r: 0.7 + Math.random() * 0.7, k: 0,
+      };
+    });
     this.crowd = new THREE.InstancedMesh(
-      new THREE.CapsuleGeometry(0.22, 0.34, 4, 8),
-      new THREE.MeshStandardMaterial({ roughness: 0.6 }),
-      N,
+      new THREE.CapsuleGeometry(0.19, 0.26, 4, 8),
+      new THREE.MeshStandardMaterial({ roughness: 0.65 }),
+      CROWD_N,
     );
-    const palette = ["#ff4d5e", "#2f8bff", "#22c06b", "#ffa51f", "#a35cf0", "#ffffff", "#ffe14d"];
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      const r = 3.9 + (i % 4) * 0.62 + Math.random() * 0.3;
-      this.crowdSeeds.push({ x: Math.cos(a) * r * 1.12, z: -0.6 + Math.sin(a) * r * 0.86, p: Math.random() * 6 });
-      this.crowd.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+    this.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshStandardMaterial({ roughness: 0.6 }), CROWD_N);
+    const baju = ["#e5432f", "#2f6fe4", "#18a66a", "#ffc83d", "#8d5cf0", "#ffffff", "#ff7fa8", "#1b2440"];
+    const kulit = ["#f6cfa6", "#e9b98a", "#d9a273"];
+    const nol = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < CROWD_N; i++) {
+      this.crowd.setColorAt(i, new THREE.Color(baju[i % baju.length]));
+      this.heads.setColorAt(i, new THREE.Color(kulit[i % kulit.length]));
+      this.crowd.setMatrixAt(i, nol);
+      this.heads.setMatrixAt(i, nol);
     }
     this.crowd.castShadow = true;
-    this.crowd.visible = false;
-    this.crowd.frustumCulled = false;
-    this.scene.add(this.crowd);
-    // poster demo yang diacung-acungkan
+    this.crowd.frustumCulled = this.heads.frustumCulled = false;
+    this.scene.add(this.crowd, this.heads);
+    // poster yang diacung-acungkan tiap beberapa orang
     this.signs = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.62, 0.4, 0.05),
+      new THREE.BoxGeometry(0.66, 0.42, 0.05),
       new THREE.MeshStandardMaterial({ roughness: 0.7 }),
-      Math.ceil(N / 5),
+      Math.ceil(CROWD_N / 5),
     );
-    for (let i = 0; i < this.signs.count; i++) this.signs.setColorAt(i, new THREE.Color(i % 2 ? "#ffffff" : "#ffe14d"));
-    this.signs.visible = false;
+    for (let i = 0; i < this.signs.count; i++) {
+      this.signs.setColorAt(i, new THREE.Color(["#ffffff", "#ffc83d", "#ff7a66"][i % 3]));
+      this.signs.setMatrixAt(i, nol);
+    }
     this.signs.frustumCulled = false;
     this.scene.add(this.signs);
+    // dua spanduk besar: muncul saat massa sudah ramai
+    for (const [teks, x, z] of [["TURUNKAN HARGA!", -2.7, 3.3], ["RAKYAT BERSATU", 2.9, 4.5]] as const) {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.4, 0.74),
+        new THREE.MeshBasicMaterial({ map: spandukTexture(teks), side: THREE.DoubleSide }),
+      );
+      m.position.set(x, TOP + 1.7, z);
+      m.rotation.x = -0.5;
+      m.visible = false;
+      this.spanduk.push(m);
+      this.scene.add(m);
+    }
 
     // kolam partikel untuk semua efek (debu, percikan, koin, konfeti, hujan)
     this.fxMesh = new THREE.InstancedMesh(
@@ -215,6 +269,8 @@ export class GameScene {
       const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, this.camera);
+      const tanda = ray.intersectObjects([...this.markers.values()], false)[0];
+      if (tanda) return this.onTileClick(tanda.object.userData.tile as number);
       const hit = ray.intersectObjects(this.tiles, false)[0];
       if (hit) this.onTileClick(this.tiles.indexOf(hit.object as THREE.Mesh));
     });
@@ -522,15 +578,55 @@ export class GameScene {
     w.emissiveIntensity = 0;
   }
 
-  /** Massa mengepung Istana selama `ms`. */
+  /** Jumlah massa di depan Istana mengikuti Semangat Demo (0..100). */
+  setCrowd(semangat: number): void {
+    const frac = Math.max(0, Math.min(1, semangat / 100));
+    const target = Math.round(frac * CROWD_N);
+    // yang baru datang masuk bergiliran, tidak muncul serentak
+    for (let i = this.massaTarget; i < target; i++) this.massa[i].k = Math.min(this.massa[i].k, 0) - (i - this.massaTarget) * 0.035;
+    this.massaTarget = target;
+    this.energiGoal = 0.18 + frac * 0.6;
+  }
+
+  /** Demo Akbar: seluruh massa merangsek ke Istana selama `ms`. */
   async demo(ms: number): Promise<void> {
     this.follow = null;
-    this.goalTarget.set(0, TOP, 1.2);
-    this.goalDist = this.focusDist * 1.12;
-    this.crowd.visible = this.signs.visible = true;
-    this.shake(ms * 0.6, 0.18);
-    await this.tween(ms, () => undefined);
-    this.crowd.visible = this.signs.visible = false;
+    this.goalTarget.set(0, TOP, 2.4);
+    this.goalDist = this.focusDist * 1.08;
+    this.setCrowd(100);
+    for (const m of this.massa) m.k = Math.max(m.k, 0.55);
+    this.demoUntil = performance.now() + ms;
+    this.shake(ms * 0.7, 0.16);
+    let terakhir = 0;
+    await this.tween(ms, (k) => {
+      // suar asap warna-warni menyala bergantian di tengah massa
+      if (k - terakhir > 0.09) {
+        terakhir = k;
+        const m = this.massa[Math.floor(Math.random() * this.massa.length)];
+        this.burst(Math.random() < 0.7 ? "flare" : "confetti", new THREE.Vector3(m.x, TOP + 0.9, m.z));
+      }
+    });
+  }
+
+  /** Penanda "bisa di-upgrade" di atas usaha milik pemain. */
+  setMarkers(tiles: number[]): void {
+    for (const [i, sp] of this.markers) {
+      if (tiles.includes(i)) continue;
+      this.scene.remove(sp);
+      this.markers.delete(i);
+    }
+    for (const i of tiles) {
+      if (this.markers.has(i)) continue;
+      this.markerMat ??= new THREE.SpriteMaterial({ map: markerTexture(), depthTest: false, transparent: true });
+      const sp = new THREE.Sprite(this.markerMat);
+      const { x, z } = tileXZ(i);
+      sp.position.set(x, TOP + 3, z);
+      sp.scale.setScalar(1.25);
+      sp.renderOrder = 20;
+      sp.userData.tile = i;
+      this.markers.set(i, sp);
+      this.scene.add(sp);
+    }
   }
 
   async collapseIstana(): Promise<void> {
@@ -654,6 +750,58 @@ export class GameScene {
         this.burst("confetti", new THREE.Vector3((Math.random() - 0.5) * 12, TOP + 4 + Math.random() * 3, (Math.random() - 0.5) * 9));
       }, i * 420);
     }
+  }
+
+  /** Massa demo: lari masuk, melompat-lompat, mengacungkan poster. */
+  private updateCrowd(dt: number, t: number, now: number): void {
+    const demo = now < this.demoUntil;
+    this.energi += ((demo ? 1.5 : this.energiGoal) - this.energi) * Math.min(1, dt * 4);
+    const e = this.energi;
+    const desak = demo ? 0.55 + Math.abs(Math.sin(t * 5)) * 0.45 : 0; // merangsek ke arah Istana
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+    const Z = new THREE.Vector3(0, 0, 1);
+    let hadir = 0;
+    this.massa.forEach((s, i) => {
+      const mau = i < this.massaTarget ? 1 : 0;
+      if (s.k !== mau) s.k = mau ? Math.min(1, s.k + (dt / 0.85) * s.r) : Math.max(0, Math.min(1, s.k) - (dt / 0.7) * s.r);
+      const k = Math.max(0, Math.min(1, s.k));
+      if (k <= 0) {
+        m.makeScale(0, 0, 0);
+        this.crowd.setMatrixAt(i, m);
+        this.heads.setMatrixAt(i, m);
+        if (i % 5 === 0) this.signs.setMatrixAt(i / 5, m);
+        return;
+      }
+      const ke = 1 - (1 - k) * (1 - k);
+      const di = k >= 1;
+      if (di) hadir++;
+      const x = s.sx + (s.x - s.sx) * ke;
+      const z = s.sz + (s.z - s.sz) * ke - (di ? desak * 0.5 : 0);
+      // di jalan: langkah lari kecil; di tempat: melompat makin tinggi seiring semangat
+      const lompat = di ? Math.abs(Math.sin(t * (4.5 + e * 3.5) + s.p)) * (0.05 + e * e * 0.3) : Math.abs(Math.sin(t * 13 + s.p)) * 0.16;
+      const y = TOP + 0.22 + lompat;
+      m.makeTranslation(x, y, z);
+      this.crowd.setMatrixAt(i, m);
+      m.makeTranslation(x, y + 0.42, z);
+      this.heads.setMatrixAt(i, m);
+      if (i % 5 === 0) {
+        if (di) {
+          q.setFromAxisAngle(Z, Math.sin(t * 5 + s.p) * (0.12 + e * 0.2));
+          m.compose(pos.set(x, y + 1.05, z), q, scl.set(1, 1, 1));
+        } else m.makeScale(0, 0, 0);
+        this.signs.setMatrixAt(i / 5, m);
+      }
+    });
+    this.crowd.instanceMatrix.needsUpdate = this.heads.instanceMatrix.needsUpdate = this.signs.instanceMatrix.needsUpdate = true;
+    this.spanduk.forEach((sp, i) => {
+      sp.visible = hadir >= (i === 0 ? 34 : 72);
+      sp.position.y = TOP + 1.75 + Math.abs(Math.sin(t * (4.5 + e * 3.5) + i * 1.3)) * (0.05 + e * e * 0.25);
+      sp.rotation.z = Math.sin(t * 3 + i) * 0.05;
+      sp.position.z = (i === 0 ? 3.3 : 4.5) - desak * 0.5;
+    });
   }
 
   private updateFx(dt: number, now: number): void {
@@ -865,21 +1013,9 @@ export class GameScene {
       if (c.position.x > 46) c.position.x = -46;
     });
 
-    if (this.crowd.visible) {
-      const m = new THREE.Matrix4();
-      this.crowdSeeds.forEach((s, i) => {
-        m.makeTranslation(s.x, TOP + 0.2 + Math.abs(Math.sin(t * 8 + s.p)) * 0.5, s.z);
-        this.crowd.setMatrixAt(i, m);
-      });
-      this.crowd.instanceMatrix.needsUpdate = true;
-      for (let i = 0; i < this.signs.count; i++) {
-        const s = this.crowdSeeds[i * 5];
-        m.makeRotationZ(Math.sin(t * 6 + s.p) * 0.25);
-        m.setPosition(s.x, TOP + 1.35 + Math.abs(Math.sin(t * 8 + s.p)) * 0.5, s.z);
-        this.signs.setMatrixAt(i, m);
-      }
-      this.signs.instanceMatrix.needsUpdate = true;
-    }
+    this.updateCrowd(dt, t, now);
+    let mi = 0;
+    for (const sp of this.markers.values()) sp.position.y = TOP + 3 + Math.sin(t * 4 + mi++) * 0.14;
 
     this.updateFx(dt, now);
 

@@ -600,3 +600,23 @@ describe("simulasi", () => {
     }
   });
 });
+
+// Klien menganimasikan event satu per satu. Event tanpa penangan hanya jadi sebaris teks,
+// jadi daftar ini menjaga supaya penangan tidak hilang diam-diam saat game.ts dirombak.
+it("kontrak: setiap event engine punya penangan animasi di klien", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const dir = new URL("../functions/_shared/engine/", import.meta.url);
+  let sumber = "";
+  for (const f of await readdir(dir)) if (f.endsWith(".ts")) sumber += await readFile(new URL(f, dir), "utf8");
+  const tipe = new Set<string>();
+  for (const m of sumber.matchAll(/type: "([a-z_]+)", (?:actor|payload)/g)) tipe.add(m[1]);
+  assert.ok(tipe.size > 40, "pola pencarian event tidak cocok lagi dengan kode engine");
+  const klien = await readFile(new URL("../../web3d/src/game.ts", import.meta.url), "utf8");
+  // cukup sebaris teks di umpan, tidak butuh animasi sendiri
+  const cukupTeks = new Set([
+    "bayar_denda", "bebas_tilang", "donasi_lumbung", "lewati_beli", "lewati_giliran",
+    "masih_ditilang", "tak_mampu_beli", "tawaran_beli", "tip_ojol",
+  ]);
+  const hilang = [...tipe].filter((t) => !cukupTeks.has(t) && !klien.includes(`case "${t}"`));
+  assert.deepEqual(hilang, []);
+});

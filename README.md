@@ -8,7 +8,7 @@ Main di browser: https://negeri-wkwk.vercel.app
 
 - **Tujuan:** habiskan ❤️ Kekuasaan Rezim sebelum Pemilu (ronde 20). Kalah kalau Pemilu tiba, atau 2 warga bangkrut.
 - **Cari duit:** lempar dadu, beli usaha. Tiap lewat Gajian dapat gaji + omzet usaha. Uangnya DR (Duit Rakyat), skala rupiah.
-- **✊ Semangat Demo:** terisi saat warga beli/upgrade usaha, bikin petisi, atau kena pungli. Penuh = Demo Akbar, Kekuasaan Rezim rontok.
+- **Semangat Demo:** terisi saat warga beli/upgrade usaha, bikin petisi, atau kena pungli. Massa berkumpul di depan Istana, makin ramai seiring Semangat. Penuh = Demo Akbar, Kekuasaan Rezim rontok.
 - **Rezim:** tiap akhir ronde keluar satu Kebijakan (atau bencana), lalu mobil pejabat jalan. Petak kosong dicaplok; kalau mampir ke usaha rakyat, dia yang bayar dan Kekuasaannya turun.
 - **🌾 Lumbung Bersama:** dana talangan. Otomatis menalangi warga yang tidak sanggup bayar, dan bisa mendanai Liputan Media.
 - **Kampung Mandiri:** satu warna dikuasai rakyat (boleh beda orang) = omzet dan sewa 2x, Kekuasaan turun.
@@ -21,6 +21,7 @@ Main di browser: https://negeri-wkwk.vercel.app
 - **Sidang Warga:** tiap pemain boleh memanggil sidang satu kali. Semua warga memilih siapa yang diusir (atau abstain), dan suara terbanyak keluar dari permainan. Kalau yang diusir memang buzzer, hartanya dibagi ke warga dan Rezim kena pukul. Kalau salah orang, hartanya disita Rezim dan semangat warga turun.
 - **Resmi atau pelicin:** buka dan upgrade usaha lewat jalur resmi (harga + izin 15%) atau uang pelicin (lebih murah 15%, tapi 25% kena OTT: denda DR 1,5 jt dan ditahan; tiap suap yang lolos memulihkan 2 Kekuasaan Rezim).
 - **Pinjol:** uang cair seketika; utang langsung +20%, berbunga 10% tiap ronde, dicicil DR 1 jt tiap gajian. Utang DR 6 jt ke atas membuat giliran dilewati.
+- **Upgrade usaha:** mendarat di usaha sendiri langsung ditawari upgrade; bisa juga ketuk panah kuning di atas usaha, atau lewat tombol Aksi.
 - **Bantu warga:** kirim uang ke warga lain; utang pinjolnya dilunasi dulu. Memberi poin jasa dan Semangat.
 
 Mode kedua, **Juragan**, bersaing jadi yang paling tajir; Rezim tetap mengganggu.
@@ -52,3 +53,7 @@ Tes database butuh PostgreSQL 15+ atau Docker: `npm run test:db`.
 - Push ke `main`: GitHub Actions menjalankan tes, lalu membangun `web3d` ke branch `web-preview` yang di-deploy Vercel.
 - Integrasi GitHub Supabase men-deploy migration dan Edge Functions yang terdaftar di `supabase/config.toml`.
 - Rilis ke Play Store dan App Store: lihat `RELEASE.md`.
+
+## Gaya visual
+
+Arah desain "stopmap & stempel": warna datar, garis tinta, bayangan keras, tanpa gradasi. Beranda berupa kartu warga (nama, pekerjaan, pangkat sebagai stempel). Huruf: Bagel Fat One untuk judul dan Plus Jakarta Sans untuk teks. Ikon dan avatar digambar sendiri di `web3d/src/icons.ts` (topi avatar sama dengan topi pion 3D), jadi antarmuka tidak bergantung pada emoji bawaan HP.
